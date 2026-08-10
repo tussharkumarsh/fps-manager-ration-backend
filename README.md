@@ -9,7 +9,7 @@ Express + TypeScript API backing [fps-manager-ration](../fps-manager-ration). Ow
    - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — from the Supabase dashboard (Settings → API Keys). The service_role key must never be exposed to a browser.
    - `INTERNAL_API_KEY` — a random shared secret, generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. The frontend's `.env.local` must have the same value.
 3. Run `supabase/schema.sql` once in the Supabase SQL Editor (Project → SQL Editor → New query) to create the tables. This can't be automated with only the API keys — it needs the SQL Editor or a direct DB password.
-
+ 
 ## Run
 
 ```
