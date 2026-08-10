@@ -47,10 +47,21 @@ export class SyncService {
     distCode: string,
     fpsId: string,
     year: string,
-    month: string
+    month: string,
+    readOnly = false
   ): Promise<MonthDataResult> {
     const cacheKey = `${year}-${month}`;
     const current = isCurrentMonth(year, month);
+
+    // Read-only callers (an admin browsing another dealer's data) must never
+    // trigger a live gov-API fetch-and-store — that would silently write new
+    // transaction data into a dealer's account as a side effect of an admin
+    // just looking at it. Only ever serve what's already stored.
+    if (readOnly) {
+      const lock = await this.lockRepo.get(fpsId, year, month);
+      const stored = await this.txnRepo.getForMonth(fpsId, year, month);
+      return { transactions: stored, source: "sheet_cache", lockStatus: lock?.status ?? "live" };
+    }
 
     if (current) {
       const result = await this.fetchAndStore(distCode, fpsId, year, month, "live");

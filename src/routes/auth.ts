@@ -36,6 +36,15 @@ router.post("/users", async (req, res) => {
   }
 });
 
+router.get("/users", async (_req, res) => {
+  try {
+    const users = await authService.listUsers();
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 router.get("/profile", async (req, res) => {
   try {
     const fpsId = String(req.query.fpsId || "");

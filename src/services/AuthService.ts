@@ -37,6 +37,11 @@ export class AuthService {
     };
   }
 
+  async listUsers(): Promise<UserProfile[]> {
+    const users = await this.userRepo.getAll();
+    return users.map(({ passwordHash: _passwordHash, ...profile }) => profile);
+  }
+
   async getProfile(fpsId: string): Promise<UserProfile | null> {
     const user = await this.userRepo.findByFpsId(fpsId.trim());
     if (!user) return null;

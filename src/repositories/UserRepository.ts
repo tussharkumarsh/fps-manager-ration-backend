@@ -26,6 +26,12 @@ function rowToUser(row: UserRow): AppUser {
 }
 
 export class UserRepository {
+  async getAll(): Promise<AppUser[]> {
+    const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false });
+    if (error) throw new Error(`UserRepository.getAll: ${error.message}`);
+    return (data as UserRow[]).map(rowToUser);
+  }
+
   async findByFpsId(fpsId: string): Promise<AppUser | null> {
     const trimmed = fpsId.trim();
     const { data, error } = await supabase

@@ -13,8 +13,9 @@ router.get("/", async (req, res) => {
     res.status(400).json({ error: "fpsId, distCode, year and month are required" });
     return;
   }
+  const readOnly = req.query.readOnly === "true";
   try {
-    const result = await syncService.getMonthData(distCode, fpsId, year, month);
+    const result = await syncService.getMonthData(distCode, fpsId, year, month, readOnly);
     res.json({
       success: true,
       transactions: result.transactions,
