@@ -236,4 +236,19 @@ export class InventoryRepository {
     await this.upsertLedgerRow(entry);
     return entry;
   }
+
+  /**
+   * Deletes every inventory item and ledger entry for this dealer —
+   * opening balances, received/distributed history, everything. Used by
+   * the factory reset / admin "clear data" flow; the default items get
+   * re-seeded fresh (all balances at zero) the next time this dealer's
+   * inventory is read.
+   */
+  async clearAll(fpsId: string): Promise<void> {
+    const trimmed = fpsId.trim();
+    const { error: ledgerError } = await supabase.from("inventory_ledger").delete().eq("fps_id", trimmed);
+    if (ledgerError) throw new Error(`InventoryRepository.clearAll (ledger): ${ledgerError.message}`);
+    const { error: itemsError } = await supabase.from("inventory_items").delete().eq("fps_id", trimmed);
+    if (itemsError) throw new Error(`InventoryRepository.clearAll (items): ${itemsError.message}`);
+  }
 }

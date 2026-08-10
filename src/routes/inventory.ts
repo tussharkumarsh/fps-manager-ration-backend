@@ -133,4 +133,19 @@ router.get("/yearly", async (req, res) => {
   }
 });
 
+/** Deletes every inventory item and ledger entry (all opening balances, history) for a dealer. */
+router.delete("/", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  if (!fpsId) {
+    res.status(400).json({ error: "fpsId is required" });
+    return;
+  }
+  try {
+    await inventoryService.clearAll(fpsId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 export default router;

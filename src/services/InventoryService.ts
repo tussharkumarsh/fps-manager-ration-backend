@@ -136,4 +136,8 @@ export class InventoryService {
     }
     return { items, monthly };
   }
+
+  async clearAll(fpsId: string): Promise<void> {
+    await this.inventoryRepo.clearAll(fpsId);
+  }
 }
