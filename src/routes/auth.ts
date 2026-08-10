@@ -45,19 +45,25 @@ router.delete("/users/:fpsId", async (req, res) => {
   }
 });
 
-router.patch("/users/role", async (req, res) => {
+router.patch("/users/:fpsId", async (req, res) => {
   try {
-    const { fpsId, role } = req.body ?? {};
-    if (!fpsId || (role !== "dealer" && role !== "admin")) {
-      res.status(400).json({ error: "fpsId and role ('dealer' or 'admin') are required" });
+    const { distCode, username, displayName, role, active } = req.body ?? {};
+    if (role !== undefined && role !== "dealer" && role !== "admin") {
+      res.status(400).json({ error: "role must be 'dealer' or 'admin'" });
       return;
     }
-    const ok = await authService.updateRole(fpsId, role);
-    if (!ok) {
+    const profile = await authService.updateProfile(req.params.fpsId, {
+      distCode,
+      username,
+      displayName,
+      role,
+      active,
+    });
+    if (!profile) {
       res.status(404).json({ error: "User not found" });
       return;
     }
-    res.json({ success: true });
+    res.json({ success: true, profile });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }

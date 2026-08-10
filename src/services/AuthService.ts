@@ -70,11 +70,26 @@ export class AuthService {
     await this.userRepo.remove(fpsId);
   }
 
-  async updateRole(fpsId: string, role: "dealer" | "admin"): Promise<boolean> {
+  /**
+   * Edits an existing account's non-credential fields — never touches
+   * passwordHash, so this can't be used to reset a password.
+   */
+  async updateProfile(
+    fpsId: string,
+    updates: Partial<{
+      distCode: string;
+      username: string;
+      displayName: string;
+      role: "dealer" | "admin";
+      active: boolean;
+    }>
+  ): Promise<UserProfile | null> {
     const user = await this.userRepo.findByFpsId(fpsId.trim());
-    if (!user) return false;
-    await this.userRepo.upsert({ ...user, role });
-    return true;
+    if (!user) return null;
+    const merged: AppUser = { ...user, ...updates };
+    await this.userRepo.upsert(merged);
+    const { passwordHash: _passwordHash, ...profile } = merged;
+    return profile;
   }
 
   async createOrUpdateUser(params: {
