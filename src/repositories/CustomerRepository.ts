@@ -65,14 +65,15 @@ export class CustomerRepository {
     if (customers.length === 0) return 0;
     const trimmed = fpsId.trim();
 
+    // Reads every existing customer for this dealer (scoped by fps_id
+    // only — no per-row filter) rather than an `.in(src_no, [...])` with
+    // one value per imported row: a bulk import of hundreds of customers
+    // would otherwise build a query string with hundreds of values, which
+    // risks hitting a request/URL size limit on Supabase's REST gateway.
     const { data: existingRows, error: readError } = await supabase
       .from("customers")
       .select("*")
-      .eq("fps_id", trimmed)
-      .in(
-        "src_no",
-        customers.map((c) => c.srcNo)
-      );
+      .eq("fps_id", trimmed);
     if (readError) throw new Error(`CustomerRepository.upsertMany (read): ${readError.message}`);
 
     const existingBySrcNo = new Map((existingRows as CustomerRow[]).map((r) => [r.src_no, r]));
@@ -91,8 +92,15 @@ export class CustomerRepository {
       return result;
     });
 
-    const { error } = await supabase.from("customers").upsert(merged, { onConflict: "fps_id,src_no" });
-    if (error) throw new Error(`CustomerRepository.upsertMany: ${error.message}`);
+    // Batched to keep each upsert request body a bounded size — a single
+    // request with thousands of rows risks the same kind of platform-level
+    // size/time limit this function was already rewritten to avoid.
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < merged.length; i += BATCH_SIZE) {
+      const batch = merged.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("customers").upsert(batch, { onConflict: "fps_id,src_no" });
+      if (error) throw new Error(`CustomerRepository.upsertMany: ${error.message}`);
+    }
     return merged.length;
   }
 
