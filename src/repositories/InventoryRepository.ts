@@ -149,6 +149,38 @@ export class InventoryRepository {
     return entry;
   }
 
+  /**
+   * Directly overrides the opening balance for a month — used for initial
+   * stock setup (a dealer's very first month has no prior month to derive
+   * an opening balance from) or to correct a discrepancy. Preserves
+   * whatever received/distributed already exist for that month.
+   */
+  async setOpening(
+    fpsId: string,
+    year: string,
+    month: string,
+    itemId: string,
+    opening: number
+  ): Promise<InventoryLedgerEntry> {
+    const { data: existing, error } = await supabase
+      .from("inventory_ledger")
+      .select("*")
+      .eq("fps_id", fpsId.trim())
+      .eq("year", String(year).trim())
+      .eq("month", String(month).trim())
+      .eq("item_id", itemId.trim())
+      .maybeSingle();
+    if (error) throw new Error(`InventoryRepository.setOpening: ${error.message}`);
+
+    const row = existing as LedgerRow | null;
+    const received = row?.received ?? 0;
+    const distributed = row?.distributed_manual ?? 0;
+    const closing = opening + received - distributed;
+    const entry: InventoryLedgerEntry = { fpsId, year, month, itemId, opening, received, distributed, closing };
+    await this.upsertLedgerRow(entry);
+    return entry;
+  }
+
   async setManualDistributed(
     fpsId: string,
     year: string,

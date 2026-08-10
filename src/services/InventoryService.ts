@@ -92,4 +92,48 @@ export class InventoryService {
   ): Promise<InventoryLedgerEntry> {
     return this.inventoryRepo.setManualDistributed(fpsId, year, month, itemId, distributed);
   }
+
+  async setOpening(
+    fpsId: string,
+    year: string,
+    month: string,
+    itemId: string,
+    opening: number
+  ): Promise<InventoryLedgerEntry> {
+    return this.inventoryRepo.setOpening(fpsId, year, month, itemId, opening);
+  }
+
+  /** Bulk opening-balance setup — e.g. onboarding a dealer's starting stock across every item at once. */
+  async setOpeningBalances(
+    fpsId: string,
+    year: string,
+    month: string,
+    balances: { itemId: string; opening: number }[]
+  ): Promise<InventoryLedgerEntry[]> {
+    const entries: InventoryLedgerEntry[] = [];
+    for (const b of balances) {
+      entries.push(await this.inventoryRepo.setOpening(fpsId, year, month, b.itemId, b.opening));
+    }
+    return entries;
+  }
+
+  /**
+   * A full year's ledger per item, month by month — powers the "All
+   * Months" monthwise table view. Reuses getMonthLedger (which already
+   * joins live transaction totals for tx-linked items) for each of the 12
+   * months, so it stays consistent with the single-month view.
+   */
+  async getYearLedger(
+    fpsId: string,
+    year: string
+  ): Promise<{ items: InventoryItem[]; monthly: Record<string, InventoryLedgerEntry[]> }> {
+    const items = await this.inventoryRepo.getItems(fpsId);
+    const months = Array.from({ length: 12 }, (_, i) => String(i + 1));
+    const monthly: Record<string, InventoryLedgerEntry[]> = {};
+    for (const month of months) {
+      const { ledger } = await this.getMonthLedger(fpsId, year, month);
+      monthly[month] = ledger;
+    }
+    return { items, monthly };
+  }
 }
