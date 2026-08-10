@@ -43,6 +43,11 @@ export class UserRepository {
     return data ? rowToUser(data as UserRow) : null;
   }
 
+  async remove(fpsId: string): Promise<void> {
+    const { error } = await supabase.from("users").delete().eq("fps_id", fpsId.trim());
+    if (error) throw new Error(`UserRepository.remove: ${error.message}`);
+  }
+
   async upsert(user: AppUser): Promise<void> {
     const { error } = await supabase.from("users").upsert(
       {

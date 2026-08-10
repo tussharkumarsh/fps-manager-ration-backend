@@ -66,6 +66,17 @@ export class AuthService {
     return true;
   }
 
+  async deleteUser(fpsId: string): Promise<void> {
+    await this.userRepo.remove(fpsId);
+  }
+
+  async updateRole(fpsId: string, role: "dealer" | "admin"): Promise<boolean> {
+    const user = await this.userRepo.findByFpsId(fpsId.trim());
+    if (!user) return false;
+    await this.userRepo.upsert({ ...user, role });
+    return true;
+  }
+
   async createOrUpdateUser(params: {
     fpsId: string;
     distCode: string;

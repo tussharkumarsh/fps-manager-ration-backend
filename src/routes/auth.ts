@@ -36,6 +36,33 @@ router.post("/users", async (req, res) => {
   }
 });
 
+router.delete("/users/:fpsId", async (req, res) => {
+  try {
+    await authService.deleteUser(req.params.fpsId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+router.patch("/users/role", async (req, res) => {
+  try {
+    const { fpsId, role } = req.body ?? {};
+    if (!fpsId || (role !== "dealer" && role !== "admin")) {
+      res.status(400).json({ error: "fpsId and role ('dealer' or 'admin') are required" });
+      return;
+    }
+    const ok = await authService.updateRole(fpsId, role);
+    if (!ok) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 router.get("/users", async (_req, res) => {
   try {
     const users = await authService.listUsers();
