@@ -140,9 +140,30 @@ export class InventoryRepository {
     received: number,
     distributed: number
   ): Promise<InventoryLedgerEntry> {
-    const prevYear = month === "1" || month === "01" ? String(parseInt(year, 10) - 1) : year;
-    const prevMonth = month === "1" || month === "01" ? "12" : String(parseInt(month, 10) - 1);
-    const opening = await this.closingFor(fpsId, prevYear, prevMonth, itemId);
+    // If this month's row already has an opening balance (whether set
+    // manually via setOpening or already carried forward earlier), keep
+    // it — only derive from the previous month's closing when this is the
+    // very first time this item/month combination is touched. Otherwise a
+    // manually-set opening balance would get silently overwritten the
+    // next time "received" is updated.
+    const { data: existing, error } = await supabase
+      .from("inventory_ledger")
+      .select("opening")
+      .eq("fps_id", fpsId.trim())
+      .eq("year", String(year).trim())
+      .eq("month", String(month).trim())
+      .eq("item_id", itemId.trim())
+      .maybeSingle();
+    if (error) throw new Error(`InventoryRepository.setReceived: ${error.message}`);
+
+    let opening: number;
+    if (existing) {
+      opening = (existing as { opening: number }).opening;
+    } else {
+      const prevYear = month === "1" || month === "01" ? String(parseInt(year, 10) - 1) : year;
+      const prevMonth = month === "1" || month === "01" ? "12" : String(parseInt(month, 10) - 1);
+      opening = await this.closingFor(fpsId, prevYear, prevMonth, itemId);
+    }
     const closing = opening + received - distributed;
     const entry: InventoryLedgerEntry = { fpsId, year, month, itemId, opening, received, distributed, closing };
     await this.upsertLedgerRow(entry);
