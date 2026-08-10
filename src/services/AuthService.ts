@@ -9,6 +9,16 @@ export interface AuthResult {
   displayName: string;
 }
 
+export interface UserProfile {
+  fpsId: string;
+  distCode: string;
+  username: string;
+  displayName: string;
+  role: "dealer" | "admin";
+  createdAt: string;
+  active: boolean;
+}
+
 export class AuthService {
   private userRepo = new UserRepository();
 
@@ -25,6 +35,30 @@ export class AuthService {
       role: user.role,
       displayName: user.displayName,
     };
+  }
+
+  async getProfile(fpsId: string): Promise<UserProfile | null> {
+    const user = await this.userRepo.findByFpsId(fpsId.trim());
+    if (!user) return null;
+    const { passwordHash: _passwordHash, ...profile } = user;
+    return profile;
+  }
+
+  /**
+   * Requires the caller to prove they know the current password before
+   * setting a new one — never trusts the fpsId alone, since that's easy for
+   * anyone to guess/enumerate.
+   */
+  async changePassword(fpsId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    const user = await this.userRepo.findByFpsId(fpsId.trim());
+    if (!user || !user.active) return false;
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) return false;
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.upsert({ ...user, passwordHash });
+    return true;
   }
 
   async createOrUpdateUser(params: {

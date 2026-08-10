@@ -36,4 +36,44 @@ router.post("/users", async (req, res) => {
   }
 });
 
+router.get("/profile", async (req, res) => {
+  try {
+    const fpsId = String(req.query.fpsId || "");
+    if (!fpsId) {
+      res.status(400).json({ error: "fpsId is required" });
+      return;
+    }
+    const profile = await authService.getProfile(fpsId);
+    if (!profile) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({ success: true, profile });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+router.post("/change-password", async (req, res) => {
+  try {
+    const { fpsId, currentPassword, newPassword } = req.body ?? {};
+    if (!fpsId || !currentPassword || !newPassword) {
+      res.status(400).json({ error: "fpsId, currentPassword and newPassword are required" });
+      return;
+    }
+    if (String(newPassword).length < 6) {
+      res.status(400).json({ error: "New password must be at least 6 characters" });
+      return;
+    }
+    const ok = await authService.changePassword(fpsId, currentPassword, newPassword);
+    if (!ok) {
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 export default router;
