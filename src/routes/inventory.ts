@@ -133,6 +133,38 @@ router.get("/yearly", async (req, res) => {
   }
 });
 
+/** Reference-only snapshot from the government's own stock register — read from local storage, never live. */
+router.get("/gov-stock", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  const year = String(req.query.year || "");
+  const month = String(req.query.month || "");
+  if (!fpsId || !year || !month) {
+    res.status(400).json({ error: "fpsId, year and month are required" });
+    return;
+  }
+  try {
+    const entries = await inventoryService.getGovStockRegister(fpsId, year, month);
+    res.json({ success: true, entries });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Fetches the latest stock register from the government portal and stores it as a reference snapshot. */
+router.post("/gov-stock/sync", async (req, res) => {
+  const { fpsId, distCode, year, month } = req.body ?? {};
+  if (!fpsId || !distCode || !year || !month) {
+    res.status(400).json({ error: "fpsId, distCode, year and month are required" });
+    return;
+  }
+  try {
+    const entries = await inventoryService.syncGovStockRegister(fpsId, distCode, year, month);
+    res.json({ success: true, entries });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 /** Deletes every inventory item and ledger entry (all opening balances, history) for a dealer. */
 router.delete("/", async (req, res) => {
   const fpsId = String(req.query.fpsId || "");

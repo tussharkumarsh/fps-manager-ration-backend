@@ -85,6 +85,27 @@ create table if not exists inventory_ledger (
   primary key (fps_id, year, month, item_id)
 );
 
+-- Reference-only snapshot of the government's own stock register
+-- (fps_stock_register_comm.action), pulled on demand. Kept separate from
+-- inventory_ledger (the dealer's locally-tracked numbers) so the two can be
+-- displayed side by side for comparison rather than one overwriting the other.
+create table if not exists gov_stock_register (
+  fps_id text not null,
+  year text not null,
+  month text not null,
+  commodity text not null,
+  unit text not null default '',
+  alloted numeric not null default 0,
+  opening numeric not null default 0,
+  received_regular numeric not null default 0,
+  received_extra numeric not null default 0,
+  received_moved numeric not null default 0,
+  issued numeric not null default 0,
+  closing numeric not null default 0,
+  fetched_at timestamptz not null default now(),
+  primary key (fps_id, year, month, commodity)
+);
+
 -- RLS stays disabled: all access goes through the backend service using the
 -- service_role key, which bypasses RLS entirely. No table should ever be
 -- queried directly from the browser with the anon key.

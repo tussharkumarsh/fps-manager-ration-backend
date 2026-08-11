@@ -1,10 +1,14 @@
 import { InventoryRepository } from "../repositories/InventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
-import type { InventoryItem, InventoryLedgerEntry } from "../types";
+import { GovStockRepository } from "../repositories/GovStockRepository";
+import { GovApiClient } from "../clients/GovApiClient";
+import type { InventoryItem, InventoryLedgerEntry, GovStockRegisterEntry } from "../types";
 
 export class InventoryService {
   private inventoryRepo = new InventoryRepository();
   private transactionRepo = new TransactionRepository();
+  private govStockRepo = new GovStockRepository();
+  private govApiClient = new GovApiClient();
 
   async getItems(fpsId: string): Promise<InventoryItem[]> {
     return this.inventoryRepo.getItems(fpsId);
@@ -139,5 +143,21 @@ export class InventoryService {
 
   async clearAll(fpsId: string): Promise<void> {
     await this.inventoryRepo.clearAll(fpsId);
+    await this.govStockRepo.clearAll(fpsId);
+  }
+
+  /** Reference-only snapshot from the government's own stock register — never overwrites the local ledger. */
+  async getGovStockRegister(fpsId: string, year: string, month: string): Promise<GovStockRegisterEntry[]> {
+    return this.govStockRepo.getForMonth(fpsId, year, month);
+  }
+
+  async syncGovStockRegister(
+    fpsId: string,
+    distCode: string,
+    year: string,
+    month: string
+  ): Promise<GovStockRegisterEntry[]> {
+    const entries = await this.govApiClient.fetchStockRegister(distCode, fpsId, month, year);
+    return this.govStockRepo.replaceForMonth(fpsId, year, month, entries);
   }
 }
