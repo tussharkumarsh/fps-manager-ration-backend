@@ -1,0 +1,192 @@
+import { ScmApiClient } from "../lib/scmApiClient";
+import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
+import type { InventoryMonthlySummary, ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
+
+export class ScmInventoryService {
+    private readonly repo = new ScmInventoryRepository();
+    private readonly api = new ScmApiClient();
+
+    async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string) {
+        const effectiveShopNo = shopNo || process.env.SCM_SHOP_NO;
+        const effectiveDistrictCode = districtCode || process.env.SCM_DISTRICT_CODE;
+        const effectiveDistrictName = districtName || process.env.SCM_DISTRICT_NAME;
+
+        if (!effectiveShopNo || !effectiveDistrictCode || !effectiveDistrictName) {
+            throw new Error("SCM_SHOP_NO, SCM_DISTRICT_CODE and SCM_DISTRICT_NAME must be configured");
+        }
+
+        const roRows = await this.api.fetchMonthlyRoList({
+            shopNo: effectiveShopNo,
+            districtCode: effectiveDistrictCode,
+            districtName: effectiveDistrictName,
+            year,
+            month,
+        });
+
+        const roRecords: ScmRoRecord[] = roRows.map((row) => ({
+            fpsId,
+            shopNo: row.shopNo,
+            districtCode: row.districtCode,
+            districtName: row.districtName,
+            year: row.year,
+            month: row.month,
+            roNo: row.roNo,
+            roDate: row.roDate,
+            roTime: row.roTime,
+            dispatched: row.dispatched,
+            sequenceNo: row.sequenceNo,
+            sourceIdentifier: row.sourceIdentifier,
+        }));
+
+        await this.repo.upsertRoRecords(roRecords);
+
+        const truckChits: ScmTruckChitRecord[] = [];
+        const transactions: ScmInventoryTransaction[] = [];
+        for (const ro of roRecords) {
+            if (!ro.roNo) continue;
+            const truckChitNo = this.buildTruckChitPattern(ro.roNo);
+            const truckRows = await this.api.fetchTruckChitDetail({
+                shopNo: effectiveShopNo,
+                districtCode: effectiveDistrictCode,
+                districtName: effectiveDistrictName,
+                year,
+                month,
+                roNo: ro.roNo,
+                truckChitNo,
+                sequenceNo: ro.sequenceNo,
+            });
+
+            if (truckRows.length === 0) continue;
+
+            const truckRecord: ScmTruckChitRecord = {
+                fpsId,
+                truckChitNo,
+                roNo: ro.roNo,
+                year,
+                month,
+                sequenceNo: ro.sequenceNo,
+                dispatchDate: truckRows[0]?.dispatchDate,
+                truckNo: undefined,
+                sourceIdentifier: truckChitNo,
+            };
+            truckChits.push(truckRecord);
+
+            for (const row of truckRows) {
+                transactions.push({
+                    fpsId,
+                    truckChitNo,
+                    roNo: ro.roNo,
+                    year,
+                    month,
+                    scheme: row.scheme,
+                    commodity: row.commodity,
+                    unit: row.unit,
+                    allocatedQty: row.allocatedQty,
+                    dispatchedQty: row.dispatchedQty,
+                    receivedQty: row.receivedQty,
+                    transactionDate: row.transactionDate,
+                    sourceIdentifier: row.sourceIdentifier,
+                    districtCode: effectiveDistrictCode,
+                });
+            }
+        }
+
+        await this.repo.upsertTruckChits(truckChits);
+        await this.repo.upsertTransactions(transactions);
+
+        const summary = await this.calculateSummary(fpsId, year, month, truckChits, transactions);
+        await this.repo.replaceSummaryRows(fpsId, year, month, summary);
+
+        return {
+            roCount: roRecords.length,
+            truckChitCount: truckChits.length,
+            summary,
+            transactions,
+        };
+    }
+
+    private buildTruckChitPattern(roNo: string): string {
+        const formatted = roNo.replace(/^RO\//, "").replace(/\//g, "-");
+        return `TC-${formatted}`;
+    }
+
+    async calculateSummary(
+        fpsId: string,
+        year: string,
+        month: string,
+        truckChits: ScmTruckChitRecord[],
+        transactions: ScmInventoryTransaction[]
+    ): Promise<InventoryMonthlySummary[]> {
+        const grouped = new Map<string, { scheme: string; commodity: string; received: number; distributed: number; truckChitCount: number; roCount: number; }>();
+
+        for (const txn of transactions) {
+            const key = `${txn.scheme}|${txn.commodity}`;
+            const current = grouped.get(key) || { scheme: txn.scheme, commodity: txn.commodity, received: 0, distributed: 0, truckChitCount: 0, roCount: 0 };
+            current.received += txn.receivedQty;
+            current.distributed += txn.dispatchedQty;
+            current.truckChitCount = Math.max(current.truckChitCount, 1);
+            grouped.set(key, current);
+        }
+
+        const previousMonth = this.previousMonth(year, month);
+        const prevRows = previousMonth ? await this.getPreviousSummaryRows(fpsId, previousMonth.year, previousMonth.month) : [];
+        const prevByKey = new Map(prevRows.map((row) => [`${row.scheme}|${row.commodity}`, row]));
+
+        const summary: InventoryMonthlySummary[] = [];
+        const order = Array.from(grouped.keys()).sort();
+        for (const key of order) {
+            const current = grouped.get(key)!;
+            const previousRow = prevByKey.get(key);
+            const openingStock = previousRow ? previousRow.closingStock : 0;
+            const closingStock = openingStock + current.received - current.distributed;
+            summary.push({
+                fpsId,
+                year,
+                month,
+                scheme: current.scheme,
+                commodity: current.commodity,
+                openingStock,
+                receivedQty: current.received,
+                distributedQty: current.distributed,
+                closingStock,
+                carriedForwardQty: closingStock,
+                truckChitCount: current.truckChitCount,
+                roCount: current.roCount,
+            });
+        }
+
+        if (!summary.length && truckChits.length > 0) {
+            for (const truckChit of truckChits) {
+                summary.push({
+                    fpsId,
+                    year,
+                    month,
+                    scheme: "UNKNOWN",
+                    commodity: "UNKNOWN",
+                    openingStock: 0,
+                    receivedQty: 0,
+                    distributedQty: 0,
+                    closingStock: 0,
+                    carriedForwardQty: 0,
+                    truckChitCount: 1,
+                    roCount: 1,
+                });
+            }
+        }
+
+        return summary;
+    }
+
+    private previousMonth(year: string, month: string): { year: string; month: string; } | null {
+        const numericMonth = Number.parseInt(month, 10);
+        if (numericMonth <= 1) {
+            return { year: String(Number.parseInt(year, 10) - 1), month: "12" };
+        }
+        return { year, month: String(numericMonth - 1).padStart(2, "0") };
+    }
+
+    private async getPreviousSummaryRows(fpsId: string, year: string, month: string): Promise<InventoryMonthlySummary[]> {
+        const data = await this.repo.getSummaryForMonth(fpsId, year, month);
+        return data;
+    }
+}

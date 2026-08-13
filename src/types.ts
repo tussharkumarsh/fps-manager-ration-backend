@@ -80,6 +80,72 @@ export interface GovStockRegisterEntry {
   fetchedAt: string;
 }
 
+export interface ScmRoRecord {
+  id?: string;
+  fpsId: string;
+  shopNo: string;
+  districtCode: string;
+  districtName: string;
+  year: string;
+  month: string;
+  roNo: string;
+  roDate?: string;
+  roTime?: string;
+  dispatched: boolean;
+  sequenceNo: number;
+  sourceIdentifier: string;
+  importedAt?: string;
+}
+
+export interface ScmTruckChitRecord {
+  id?: string;
+  fpsId: string;
+  truckChitNo: string;
+  roNo: string;
+  year: string;
+  month: string;
+  sequenceNo: number;
+  dispatchDate?: string;
+  truckNo?: string;
+  sourceIdentifier: string;
+  importedAt?: string;
+}
+
+export interface ScmInventoryTransaction {
+  id?: string;
+  fpsId: string;
+  truckChitNo: string;
+  roNo: string;
+  year: string;
+  month: string;
+  scheme: string;
+  commodity: string;
+  unit: string;
+  allocatedQty: number;
+  dispatchedQty: number;
+  receivedQty: number;
+  transactionDate?: string;
+  sourceIdentifier: string;
+  importedAt?: string;
+  districtCode?: string;
+}
+
+export interface InventoryMonthlySummary {
+  fpsId: string;
+  year: string;
+  month: string;
+  scheme: string;
+  commodity: string;
+  openingStock: number;
+  receivedQty: number;
+  distributedQty: number;
+  closingStock: number;
+  carriedForwardQty: number;
+  truckChitCount: number;
+  roCount: number;
+  importedAt?: string;
+}
+
 export interface AppUser {
   fpsId: string;
   distCode: string;

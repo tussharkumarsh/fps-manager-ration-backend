@@ -106,6 +106,78 @@ create table if not exists gov_stock_register (
   primary key (fps_id, year, month, commodity)
 );
 
+create table if not exists scm_monthly_ro_records (
+  fps_id text not null,
+  shop_no text not null,
+  district_code text not null,
+  district_name text not null,
+  year text not null,
+  month text not null,
+  ro_no text not null,
+  ro_date text,
+  ro_time text,
+  dispatched boolean not null default false,
+  sequence_no integer not null default 0,
+  source_identifier text not null,
+  imported_at timestamptz not null default now(),
+  primary key (source_identifier)
+);
+
+create table if not exists scm_truck_chits (
+  fps_id text not null,
+  truck_chit_no text not null,
+  ro_no text not null,
+  year text not null,
+  month text not null,
+  sequence_no integer not null default 0,
+  dispatch_date text,
+  truck_no text,
+  source_identifier text not null,
+  imported_at timestamptz not null default now(),
+  primary key (source_identifier)
+);
+
+create table if not exists scm_inventory_transactions (
+  fps_id text not null,
+  truck_chit_no text not null,
+  ro_no text not null,
+  year text not null,
+  month text not null,
+  scheme text not null,
+  commodity text not null,
+  unit text not null default '',
+  allocated_qty numeric not null default 0,
+  dispatched_qty numeric not null default 0,
+  received_qty numeric not null default 0,
+  transaction_date text,
+  district_code text,
+  source_identifier text not null,
+  imported_at timestamptz not null default now(),
+  primary key (source_identifier)
+);
+
+create table if not exists scm_inventory_summary (
+  fps_id text not null,
+  year text not null,
+  month text not null,
+  scheme text not null,
+  commodity text not null,
+  opening_stock numeric not null default 0,
+  received_qty numeric not null default 0,
+  distributed_qty numeric not null default 0,
+  closing_stock numeric not null default 0,
+  carried_forward_qty numeric not null default 0,
+  truck_chit_count integer not null default 0,
+  ro_count integer not null default 0,
+  imported_at timestamptz not null default now(),
+  primary key (fps_id, year, month, scheme, commodity)
+);
+
+create index if not exists scm_monthly_ro_records_lookup_idx on scm_monthly_ro_records (fps_id, year, month);
+create index if not exists scm_truck_chits_lookup_idx on scm_truck_chits (fps_id, year, month);
+create index if not exists scm_inventory_transactions_lookup_idx on scm_inventory_transactions (fps_id, year, month);
+create index if not exists scm_inventory_summary_lookup_idx on scm_inventory_summary (fps_id, year, month);
+
 -- RLS stays disabled: all access goes through the backend service using the
 -- service_role key, which bypasses RLS entirely. No table should ever be
 -- queried directly from the browser with the anon key.

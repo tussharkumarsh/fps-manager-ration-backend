@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth";
 import customerRoutes from "./routes/customers";
 import transactionRoutes from "./routes/transactions";
 import inventoryRoutes from "./routes/inventory";
+import scmInventoryRoutes from "./routes/scmInventory";
 import resetAllRoutes from "./routes/resetAll";
 
 const app = express();
@@ -40,6 +41,7 @@ app.use("/auth", authRoutes);
 app.use("/customers", customerRoutes);
 app.use("/transactions", transactionRoutes);
 app.use("/inventory", inventoryRoutes);
+app.use("/inventory/scm", scmInventoryRoutes);
 app.use("/reset-all", resetAllRoutes);
 
 export default app;
