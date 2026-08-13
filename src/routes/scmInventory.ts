@@ -5,7 +5,7 @@ const router = Router();
 const service = new ScmInventoryService();
 
 router.post("/sync", async (req, res) => {
-    const { fpsId, year, month, shopNo, districtCode, districtName } = req.body ?? {};
+    const { fpsId, year, month, shopNo, districtCode, districtName, batchNo } = req.body ?? {};
 
     if (!fpsId || !year || !month) {
         res.status(400).json({ error: "fpsId, year and month are required" });
@@ -13,7 +13,7 @@ router.post("/sync", async (req, res) => {
     }
 
     try {
-        const result = await service.syncMonth(fpsId, String(year), String(month), shopNo, districtCode, districtName);
+        const result = await service.syncMonth(fpsId, String(year), String(month), shopNo, districtCode, districtName, batchNo);
         res.json({ success: true, ...result });
     } catch (error) {
         console.error("SCM sync failed", { error, fpsId, year, month });

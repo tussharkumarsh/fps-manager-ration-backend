@@ -6,7 +6,7 @@ export class ScmInventoryService {
     private readonly repo = new ScmInventoryRepository();
     private readonly api = new ScmApiClient();
 
-    async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string) {
+    async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
         const effectiveShopNo = shopNo || process.env.SCM_SHOP_NO;
         const effectiveDistrictCode = districtCode || process.env.SCM_DISTRICT_CODE;
         const effectiveDistrictName = districtName || process.env.SCM_DISTRICT_NAME;
@@ -23,7 +23,12 @@ export class ScmInventoryService {
             month,
         });
 
-        const roRecords: ScmRoRecord[] = roRows.map((row) => ({
+        const normalizedBatchNo = String(batchNo ?? "").trim();
+        const requestedRoRows = normalizedBatchNo
+            ? roRows.filter((row) => row.roNo.endsWith(`/${normalizedBatchNo}`))
+            : roRows;
+
+        const roRecords: ScmRoRecord[] = requestedRoRows.map((row) => ({
             fpsId,
             shopNo: row.shopNo,
             districtCode: row.districtCode,
@@ -94,7 +99,12 @@ export class ScmInventoryService {
         await this.repo.upsertTruckChits(truckChits);
         await this.repo.upsertTransactions(transactions);
 
-        const summary = await this.calculateSummary(fpsId, year, month, truckChits, transactions);
+        // Recompute from all transactions synced for the month so far (not just this
+        // batch's), otherwise a batch-scoped sync would wipe out prior batches' summary.
+        const monthTruckChitCount = normalizedBatchNo ? (await this.repo.getMonthCounts(fpsId, year, month)).truckChitCount : truckChits.length;
+        const monthTransactions = normalizedBatchNo ? await this.repo.getMonthTransactions(fpsId, year, month) : transactions;
+
+        const summary = await this.calculateSummary(fpsId, year, month, monthTruckChitCount, monthTransactions);
         await this.repo.replaceSummaryRows(fpsId, year, month, summary);
 
         return {
@@ -114,7 +124,7 @@ export class ScmInventoryService {
         fpsId: string,
         year: string,
         month: string,
-        truckChits: ScmTruckChitRecord[],
+        truckChitCount: number,
         transactions: ScmInventoryTransaction[]
     ): Promise<InventoryMonthlySummary[]> {
         const grouped = new Map<string, { scheme: string; commodity: string; received: number; distributed: number; truckChitCount: number; roCount: number; }>();
@@ -155,8 +165,8 @@ export class ScmInventoryService {
             });
         }
 
-        if (!summary.length && truckChits.length > 0) {
-            for (const truckChit of truckChits) {
+        if (!summary.length && truckChitCount > 0) {
+            for (let i = 0; i < truckChitCount; i++) {
                 summary.push({
                     fpsId,
                     year,
