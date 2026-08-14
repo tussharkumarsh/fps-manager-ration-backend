@@ -7,12 +7,15 @@ export class ScmInventoryService {
     private readonly api = new ScmApiClient();
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
-        const effectiveShopNo = shopNo || process.env.SCM_SHOP_NO;
+        // The SCM portal's shop number is the dealer's own fps_id, and its
+        // district name param is just the district code repeated - so both
+        // default off values we already have rather than requiring separate config.
+        const effectiveShopNo = shopNo || fpsId || process.env.SCM_SHOP_NO;
         const effectiveDistrictCode = districtCode || process.env.SCM_DISTRICT_CODE;
-        const effectiveDistrictName = districtName || process.env.SCM_DISTRICT_NAME;
+        const effectiveDistrictName = districtName || effectiveDistrictCode || process.env.SCM_DISTRICT_NAME;
 
         if (!effectiveShopNo || !effectiveDistrictCode || !effectiveDistrictName) {
-            throw new Error("SCM_SHOP_NO, SCM_DISTRICT_CODE and SCM_DISTRICT_NAME must be configured");
+            throw new Error("shopNo (or fpsId) and districtCode are required to sync SCM inventory");
         }
 
         const roRows = await this.api.fetchMonthlyRoList({
