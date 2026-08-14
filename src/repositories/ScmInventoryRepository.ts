@@ -178,25 +178,25 @@ export class ScmInventoryRepository {
     }
 
     async getMonthCounts(fpsId: string, year: string, month: string): Promise<{ roCount: number; truckChitCount: number; }> {
-        const { data: roData, error: roError } = await supabase
+        const { count: roCount, error: roError } = await supabase
             .from("scm_monthly_ro_records")
-            .select("id", { count: "exact", head: true })
+            .select("*", { count: "exact", head: true })
             .eq("fps_id", fpsId.trim())
             .eq("year", String(year).trim())
             .eq("month", String(month).trim());
         if (roError) throw new Error(`ScmInventoryRepository.getMonthCounts.ro: ${roError.message}`);
 
-        const { data: truckData, error: truckError } = await supabase
+        const { count: truckChitCount, error: truckError } = await supabase
             .from("scm_truck_chits")
-            .select("id", { count: "exact", head: true })
+            .select("*", { count: "exact", head: true })
             .eq("fps_id", fpsId.trim())
             .eq("year", String(year).trim())
             .eq("month", String(month).trim());
         if (truckError) throw new Error(`ScmInventoryRepository.getMonthCounts.truck: ${truckError.message}`);
 
         return {
-            roCount: roData?.length ?? 0,
-            truckChitCount: truckData?.length ?? 0,
+            roCount: roCount ?? 0,
+            truckChitCount: truckChitCount ?? 0,
         };
     }
 
