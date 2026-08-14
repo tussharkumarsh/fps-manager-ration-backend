@@ -1,10 +1,29 @@
 import { ScmApiClient } from "../lib/scmApiClient";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
+import { TransactionRepository } from "../repositories/TransactionRepository";
 import type { InventoryMonthlySummary, ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
+
+// The SCM portal's own "dispatched" figure reflects what the government
+// dispatched to us, not what we actually handed out to customers. For the
+// commodities our local transaction ledger tracks (wheat/rice/saree kit),
+// "distributed" should reflect our own recorded sales instead - so the
+// summary stays consistent with the rest of the app rather than the
+// portal's dispatch record.
+const COMMODITY_TX_FIELD: Record<string, "wheat" | "rice" | "saree"> = {
+    wheat: "wheat",
+    rice: "rice",
+    saree: "saree",
+    "saree kit": "saree",
+};
+
+function txFieldForCommodity(commodity: string): "wheat" | "rice" | "saree" | null {
+    return COMMODITY_TX_FIELD[commodity.trim().toLowerCase()] || null;
+}
 
 export class ScmInventoryService {
     private readonly repo = new ScmInventoryRepository();
     private readonly api = new ScmApiClient();
+    private readonly txnRepo = new TransactionRepository();
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
         // The SCM portal's shop number is the dealer's own fps_id, and its
@@ -118,6 +137,25 @@ export class ScmInventoryService {
         };
     }
 
+    // Re-runs calculateSummary for every already-synced month of the year,
+    // in order, using data already stored from prior SCM syncs (no portal
+    // fetch). Needed because calculateSummary reads each month's opening
+    // stock from the previous month's stored closing, so fixing the
+    // distributed-quantity logic requires recomputing months sequentially
+    // for the carry-forward chain to stay correct - not just the month
+    // that gets re-synced next.
+    async recomputeYear(fpsId: string, year: string): Promise<void> {
+        for (let m = 1; m <= 12; m++) {
+            const month = String(m);
+            const monthTransactions = await this.repo.getMonthTransactions(fpsId, year, month);
+            const { truckChitCount } = await this.repo.getMonthCounts(fpsId, year, month);
+            if (monthTransactions.length === 0 && truckChitCount === 0) continue;
+
+            const summary = await this.calculateSummary(fpsId, year, month, truckChitCount, monthTransactions);
+            await this.repo.replaceSummaryRows(fpsId, year, month, summary);
+        }
+    }
+
     private buildTruckChitPattern(roNo: string): string {
         const formatted = roNo.replace(/^RO\//, "").replace(/\//g, "-");
         return `TC-${formatted}`;
@@ -139,6 +177,24 @@ export class ScmInventoryService {
             current.distributed += txn.dispatchedQty;
             current.truckChitCount = Math.max(current.truckChitCount, 1);
             grouped.set(key, current);
+        }
+
+        // Override "distributed" with our own recorded sales for the
+        // commodities the local transaction ledger tracks, summed per
+        // scheme so AAY and PHH quantities don't get mixed together.
+        const localTxns = await this.txnRepo.getForMonth(fpsId, year, month);
+        const localDistributed = new Map<string, number>();
+        for (const txn of localTxns) {
+            for (const field of ["wheat", "rice", "saree"] as const) {
+                const key = `${txn.scheme}|${field}`;
+                localDistributed.set(key, (localDistributed.get(key) || 0) + (txn[field] || 0));
+            }
+        }
+        for (const current of grouped.values()) {
+            const txField = txFieldForCommodity(current.commodity);
+            if (txField) {
+                current.distributed = localDistributed.get(`${current.scheme}|${txField}`) || 0;
+            }
         }
 
         const previousMonth = this.previousMonth(year, month);
