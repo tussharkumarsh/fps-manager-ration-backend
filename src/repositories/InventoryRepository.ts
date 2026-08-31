@@ -27,7 +27,9 @@ interface LedgerRow {
 const DEFAULT_ITEMS: Omit<InventoryItem, "id">[] = [
   { name: "Wheat", unit: "Kg", txField: "wheat", active: true },
   { name: "Rice", unit: "Kg", txField: "rice", active: true },
+  { name: "Sugar", unit: "Kg", txField: "sugar", active: true },
   { name: "Saree Kit", unit: "Pcs", txField: "", active: true },
+  { name: "Jowar", unit: "Kg", txField: "jowar", active: true },
 ];
 
 function rowToItem(row: ItemRow): InventoryItem {
@@ -84,13 +86,29 @@ export class InventoryRepository {
     const trimmed = fpsId.trim();
     const { data, error } = await supabase.from("inventory_items").select("*").eq("fps_id", trimmed);
     if (error) throw new Error(`InventoryRepository.getItems: ${error.message}`);
-    if (data.length > 0) return (data as ItemRow[]).map(rowToItem);
+    const items = (data as ItemRow[]).map(rowToItem);
 
-    // No items yet for this dealer — seed the defaults, once.
-    const seeded = DEFAULT_ITEMS.map((item) => itemToRow(trimmed, { ...item, id: generateItemId() }));
-    const { error: insertError } = await supabase.from("inventory_items").insert(seeded);
-    if (insertError) throw new Error(`InventoryRepository.getItems (seed): ${insertError.message}`);
-    return seeded.map(rowToItem);
+    if (items.length === 0) {
+      // No items yet for this dealer — seed the defaults, once.
+      const seeded = DEFAULT_ITEMS.map((item) => itemToRow(trimmed, { ...item, id: generateItemId() }));
+      const { error: insertError } = await supabase.from("inventory_items").insert(seeded);
+      if (insertError) throw new Error(`InventoryRepository.getItems (seed): ${insertError.message}`);
+      return seeded.map(rowToItem);
+    }
+
+    // Backfill: a default tx-linked commodity (e.g. Sugar/Jowar) added to
+    // DEFAULT_ITEMS after this dealer was first seeded is still missing from
+    // their item list — add just that one, without touching anything else.
+    const existingTxFields = new Set(items.map((i) => i.txField).filter(Boolean));
+    const missingDefaults = DEFAULT_ITEMS.filter((d) => d.txField && !existingTxFields.has(d.txField));
+    if (missingDefaults.length > 0) {
+      const newRows = missingDefaults.map((item) => itemToRow(trimmed, { ...item, id: generateItemId() }));
+      const { error: backfillError } = await supabase.from("inventory_items").insert(newRows);
+      if (backfillError) throw new Error(`InventoryRepository.getItems (backfill): ${backfillError.message}`);
+      return [...items, ...newRows.map(rowToItem)];
+    }
+
+    return items;
   }
 
   async addItem(fpsId: string, item: Omit<InventoryItem, "id">): Promise<InventoryItem> {

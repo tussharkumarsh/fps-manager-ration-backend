@@ -5,18 +5,20 @@ import type { InventoryMonthlySummary, ScmInventoryTransaction, ScmRoRecord, Scm
 
 // The SCM portal's own "dispatched" figure reflects what the government
 // dispatched to us, not what we actually handed out to customers. For the
-// commodities our local transaction ledger tracks (wheat/rice/saree kit),
-// "distributed" should reflect our own recorded sales instead - so the
-// summary stays consistent with the rest of the app rather than the
+// commodities our local transaction ledger tracks (wheat/rice/sugar/saree
+// kit/jowar), "distributed" should reflect our own recorded sales instead -
+// so the summary stays consistent with the rest of the app rather than the
 // portal's dispatch record.
-const COMMODITY_TX_FIELD: Record<string, "wheat" | "rice" | "saree"> = {
+const COMMODITY_TX_FIELD: Record<string, "wheat" | "rice" | "sugar" | "saree" | "jowar"> = {
     wheat: "wheat",
     rice: "rice",
+    sugar: "sugar",
     saree: "saree",
     "saree kit": "saree",
+    jowar: "jowar",
 };
 
-function txFieldForCommodity(commodity: string): "wheat" | "rice" | "saree" | null {
+function txFieldForCommodity(commodity: string): "wheat" | "rice" | "sugar" | "saree" | "jowar" | null {
     return COMMODITY_TX_FIELD[commodity.trim().toLowerCase()] || null;
 }
 
@@ -185,7 +187,7 @@ export class ScmInventoryService {
         const localTxns = await this.txnRepo.getForMonth(fpsId, year, month);
         const localDistributed = new Map<string, number>();
         for (const txn of localTxns) {
-            for (const field of ["wheat", "rice", "saree"] as const) {
+            for (const field of ["wheat", "rice", "sugar", "saree", "jowar"] as const) {
                 const key = `${txn.scheme}|${field}`;
                 localDistributed.set(key, (localDistributed.get(key) || 0) + (txn[field] || 0));
             }

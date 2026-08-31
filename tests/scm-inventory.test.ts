@@ -6,6 +6,7 @@ import {
     parseTruckChitHtml,
     buildMonthlySummaryRows,
 } from '../src/lib/scmParser';
+import { parseEposHtml } from '../src/lib/eposParser';
 
 const januaryListHtml = `
 <table>
@@ -62,6 +63,53 @@ test('parseTruckChitHtml extracts dispatch and receipt quantities by scheme and 
         transactionDate: '2026-01-08',
         dispatchDate: '2026-01-07',
         sourceIdentifier: 'TC-REG-1512-151209500212-01-2026-1|AAY|FRice',
+    });
+});
+
+test('parseEposHtml maps Wheat/Rice/Sugar/SAREE/Jowar to the correct fields, in that column order', () => {
+    // Column order confirmed from the live epos.mahafood.gov.in transaction
+    // report: Sl No, SRC No, Scheme, Avail Type, Receipt No, Date, Wheat,
+    // Rice, Sugar, SAREE, Jowar, Amount, Portability, Auth Trans Time.
+    const html = `
+    <table id="Report">
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>272025965612</td>
+          <td>PHH</td>
+          <td>OTP</td>
+          <td>2564242562065505803</td>
+          <td>2026-08-30 12:16</td>
+          <td>6.000</td>
+          <td>6.000</td>
+          <td>0.000</td>
+          <td>0.000</td>
+          <td>3.000</td>
+          <td>0.00</td>
+          <td>Self</td>
+          <td>00.1111</td>
+        </tr>
+      </tbody>
+    </table>`;
+
+    const rows = parseEposHtml(html);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0], {
+        id: '2564242562065505803',
+        slNo: 1,
+        srcNo: '272025965612',
+        scheme: 'PHH',
+        availType: 'OTP',
+        receiptNo: '2564242562065505803',
+        date: '2026-08-30 12:16',
+        wheat: 6,
+        rice: 6,
+        sugar: 0,
+        saree: 0,
+        jowar: 3,
+        amount: 0,
+        portability: 'Self',
+        authTransTime: '00.1111',
     });
 });
 

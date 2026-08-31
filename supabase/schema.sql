@@ -74,11 +74,18 @@ create table if not exists inventory_items (
   item_id text not null,
   name text not null,
   unit text not null,
-  tx_field text not null default '' check (tx_field in ('wheat', 'rice', '')),
+  tx_field text not null default '' check (tx_field in ('wheat', 'rice', 'sugar', 'jowar', '')),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   primary key (fps_id, item_id)
 );
+
+-- Added after initial deploy: widen tx_field to allow Sugar/Jowar-linked
+-- items (run this if `inventory_items` already existed with the old,
+-- narrower check).
+alter table inventory_items drop constraint if exists inventory_items_tx_field_check;
+alter table inventory_items add constraint inventory_items_tx_field_check
+  check (tx_field in ('wheat', 'rice', 'sugar', 'jowar', ''));
 
 create table if not exists inventory_ledger (
   fps_id text not null,

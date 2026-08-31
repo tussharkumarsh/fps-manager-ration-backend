@@ -51,7 +51,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   unit: string;
-  txField: "wheat" | "rice" | "";
+  txField: "wheat" | "rice" | "sugar" | "jowar" | "";
   active: boolean;
 }
 

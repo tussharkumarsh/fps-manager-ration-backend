@@ -20,8 +20,9 @@ export class InventoryService {
 
   /**
    * Ledger for a month, joined against live transaction totals: tx-linked
-   * items (wheat/rice) always reflect actual synced distribution rather
-   * than a stored snapshot, so the ledger can't drift from real data.
+   * items (wheat/rice/sugar/jowar) always reflect actual synced
+   * distribution rather than a stored snapshot, so the ledger can't drift
+   * from real data.
    */
   async getMonthLedger(
     fpsId: string,
@@ -39,7 +40,7 @@ export class InventoryService {
     const ledger: InventoryLedgerEntry[] = items.map((item) => {
       const existing = ledgerByItem.get(item.id);
       if (item.txField) {
-        const distributed = transactions.reduce((sum, t) => sum + (t[item.txField as "wheat" | "rice"] || 0), 0);
+        const distributed = transactions.reduce((sum, t) => sum + (t[item.txField as "wheat" | "rice" | "sugar" | "jowar"] || 0), 0);
         const opening = existing?.opening ?? 0;
         const received = existing?.received ?? 0;
         return {
@@ -82,7 +83,7 @@ export class InventoryService {
     let distributed = 0;
     if (item?.txField) {
       const transactions = await this.transactionRepo.getForMonth(fpsId, year, month);
-      distributed = transactions.reduce((sum, t) => sum + (t[item.txField as "wheat" | "rice"] || 0), 0);
+      distributed = transactions.reduce((sum, t) => sum + (t[item.txField as "wheat" | "rice" | "sugar" | "jowar"] || 0), 0);
     }
     return this.inventoryRepo.setReceived(fpsId, year, month, itemId, received, distributed);
   }
