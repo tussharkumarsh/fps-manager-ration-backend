@@ -42,6 +42,10 @@ export class TransactionService {
     await this.customerRepo.add(fpsId, customer);
   }
 
+  async updateCustomer(fpsId: string, srcNo: string, patch: Partial<Customer>): Promise<void> {
+    await this.customerRepo.update(fpsId, srcNo, patch);
+  }
+
   async deleteCustomer(fpsId: string, srcNo: string): Promise<void> {
     await this.customerRepo.remove(fpsId, srcNo);
   }

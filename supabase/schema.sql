@@ -26,8 +26,17 @@ create table if not exists customers (
   mobile text,
   family_head text,
   members_json jsonb,
+  disabled boolean not null default false,
+  disabled_reason text,
+  disabled_at timestamptz,
   primary key (fps_id, src_no)
 );
+
+-- Added after initial deploy: manual disable/enable (run this if
+-- `customers` already existed without these columns).
+alter table customers add column if not exists disabled boolean not null default false;
+alter table customers add column if not exists disabled_reason text;
+alter table customers add column if not exists disabled_at timestamptz;
 
 create table if not exists transactions (
   row_key text primary key,

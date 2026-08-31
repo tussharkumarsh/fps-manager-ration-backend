@@ -25,6 +25,9 @@ export interface Customer {
   mobile?: string;
   familyHead?: string;
   members?: FamilyMember[];
+  disabled?: boolean;
+  disabledReason?: string;
+  disabledAt?: string;
 }
 
 export interface Transaction {

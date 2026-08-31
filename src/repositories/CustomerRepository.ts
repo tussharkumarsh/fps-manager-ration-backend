@@ -14,6 +14,9 @@ interface CustomerRow {
   mobile: string | null;
   family_head: string | null;
   members_json: Customer["members"] | null;
+  disabled: boolean | null;
+  disabled_reason: string | null;
+  disabled_at: string | null;
 }
 
 function rowToCustomer(row: CustomerRow): Customer {
@@ -29,10 +32,20 @@ function rowToCustomer(row: CustomerRow): Customer {
     mobile: row.mobile || undefined,
     familyHead: row.family_head || undefined,
     members: row.members_json || undefined,
+    disabled: row.disabled || undefined,
+    disabledReason: row.disabled_reason || undefined,
+    disabledAt: row.disabled_at || undefined,
   };
 }
 
-function customerToRow(fpsId: string, c: Customer): CustomerRow {
+// Deliberately excludes disabled/disabled_reason/disabled_at: imports and
+// the manual "add customer" flow never carry disable state, and including
+// them here (even as `false`/`null`) would count as an explicit value in
+// upsertMany's merge and silently re-enable an already-disabled customer on
+// the next import. Disable state is only ever written via update().
+type WritableCustomerRow = Omit<CustomerRow, "disabled" | "disabled_reason" | "disabled_at">;
+
+function customerToRow(fpsId: string, c: Customer): WritableCustomerRow {
   return {
     fps_id: fpsId,
     src_no: c.srcNo,
@@ -82,8 +95,8 @@ export class CustomerRepository {
       const incomingRow = customerToRow(trimmed, c);
       const existing = existingBySrcNo.get(c.srcNo);
       if (!existing) return incomingRow;
-      const result: CustomerRow = { ...existing };
-      for (const key of Object.keys(incomingRow) as (keyof CustomerRow)[]) {
+      const result: WritableCustomerRow = { ...existing };
+      for (const key of Object.keys(incomingRow) as (keyof WritableCustomerRow)[]) {
         const value = incomingRow[key];
         if (value !== null && value !== undefined && value !== "") {
           (result as unknown as Record<string, unknown>)[key] = value;
@@ -106,6 +119,28 @@ export class CustomerRepository {
 
   async add(fpsId: string, customer: Customer): Promise<void> {
     await this.upsertMany(fpsId, [customer]);
+  }
+
+  /**
+   * A true partial update — only touches the columns explicitly present in
+   * `patch`, unlike upsertMany's import-oriented merge. Used for direct
+   * edits from the UI (mobile number, disable/enable) where "not sent"
+   * must mean "leave alone", not "clear".
+   */
+  async update(fpsId: string, srcNo: string, patch: Partial<Customer>): Promise<void> {
+    const row: Record<string, unknown> = {};
+    if (patch.mobile !== undefined) row.mobile = patch.mobile || null;
+    if (patch.disabled !== undefined) row.disabled = patch.disabled;
+    if (patch.disabledReason !== undefined) row.disabled_reason = patch.disabledReason || null;
+    if (patch.disabledAt !== undefined) row.disabled_at = patch.disabledAt || null;
+    if (Object.keys(row).length === 0) return;
+
+    const { error } = await supabase
+      .from("customers")
+      .update(row)
+      .eq("fps_id", fpsId.trim())
+      .eq("src_no", srcNo);
+    if (error) throw new Error(`CustomerRepository.update: ${error.message}`);
   }
 
   async remove(fpsId: string, srcNo: string): Promise<void> {
