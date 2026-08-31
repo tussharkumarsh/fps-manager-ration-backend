@@ -124,12 +124,13 @@ export class CustomerRepository {
   /**
    * A true partial update — only touches the columns explicitly present in
    * `patch`, unlike upsertMany's import-oriented merge. Used for direct
-   * edits from the UI (mobile number, disable/enable) where "not sent"
-   * must mean "leave alone", not "clear".
+   * edits from the UI (mobile number, scheme, disable/enable) where "not
+   * sent" must mean "leave alone", not "clear".
    */
   async update(fpsId: string, srcNo: string, patch: Partial<Customer>): Promise<void> {
     const row: Record<string, unknown> = {};
     if (patch.mobile !== undefined) row.mobile = patch.mobile || null;
+    if (patch.scheme !== undefined) row.scheme = patch.scheme || null;
     if (patch.disabled !== undefined) row.disabled = patch.disabled;
     if (patch.disabledReason !== undefined) row.disabled_reason = patch.disabledReason || null;
     if (patch.disabledAt !== undefined) row.disabled_at = patch.disabledAt || null;

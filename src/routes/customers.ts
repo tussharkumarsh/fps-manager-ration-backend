@@ -56,13 +56,13 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/", async (req, res) => {
-  const { fpsId, srcNo, mobile, disabled, disabledReason, disabledAt } = req.body ?? {};
+  const { fpsId, srcNo, mobile, scheme, disabled, disabledReason, disabledAt } = req.body ?? {};
   if (!fpsId || !srcNo) {
     res.status(400).json({ error: "fpsId and srcNo are required" });
     return;
   }
   try {
-    await transactionService.updateCustomer(fpsId, srcNo, { mobile, disabled, disabledReason, disabledAt });
+    await transactionService.updateCustomer(fpsId, srcNo, { mobile, scheme, disabled, disabledReason, disabledAt });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
