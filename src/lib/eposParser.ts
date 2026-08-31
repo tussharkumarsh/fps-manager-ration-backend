@@ -5,14 +5,19 @@ export function parseEposHtml(html: string): Transaction[] {
   const $ = cheerio.load(html);
   const transactions: Transaction[] = [];
 
+  // Column order in the government "Qty in Kgs" table: Sl No, SRC No, Scheme,
+  // Avail Type, Receipt No, Date, Wheat, Rice, Sugar, SAREE, Jowar, Amount,
+  // Portability, Auth Trans Time.
   $("#Report tbody tr").each((i, row) => {
     const cells = $(row).find("td");
-    if (cells.length >= 11) {
+    if (cells.length >= 13) {
       const receiptNo = $(cells[4]).text().trim();
       const wheat = parseFloat($(cells[6]).text().trim()) || 0;
       const rice = parseFloat($(cells[7]).text().trim()) || 0;
-      const saree = parseFloat($(cells[8]).text().trim()) || 0;
-      const amount = parseFloat($(cells[9]).text().trim()) || 0;
+      const sugar = parseFloat($(cells[8]).text().trim()) || 0;
+      const saree = parseFloat($(cells[9]).text().trim()) || 0;
+      const jowar = parseFloat($(cells[10]).text().trim()) || 0;
+      const amount = parseFloat($(cells[11]).text().trim()) || 0;
 
       transactions.push({
         id: receiptNo,
@@ -24,10 +29,12 @@ export function parseEposHtml(html: string): Transaction[] {
         date: $(cells[5]).text().trim(),
         wheat,
         rice,
+        sugar,
         saree,
+        jowar,
         amount,
-        portability: $(cells[10]).text().trim(),
-        authTransTime: cells.length >= 12 ? $(cells[11]).text().trim() : undefined,
+        portability: $(cells[12]).text().trim(),
+        authTransTime: cells.length >= 14 ? $(cells[13]).text().trim() : undefined,
       });
     }
   });

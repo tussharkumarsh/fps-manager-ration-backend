@@ -42,7 +42,9 @@ create table if not exists transactions (
   date text,
   wheat numeric not null default 0,
   rice numeric not null default 0,
+  sugar numeric not null default 0,
   saree numeric not null default 0,
+  jowar numeric not null default 0,
   amount numeric not null default 0,
   portability text,
   auth_trans_time text,
@@ -50,6 +52,12 @@ create table if not exists transactions (
   source text not null default 'api' check (source in ('api', 'manual'))
 );
 create index if not exists transactions_fps_month_idx on transactions (fps_id, year, month);
+
+-- Added after initial deploy: Sugar and Jowar columns from the government
+-- transaction report's "Qty in Kgs" group (run this if `transactions` already
+-- existed without them).
+alter table transactions add column if not exists sugar numeric not null default 0;
+alter table transactions add column if not exists jowar numeric not null default 0;
 
 create table if not exists month_locks (
   fps_id text not null,

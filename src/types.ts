@@ -37,7 +37,9 @@ export interface Transaction {
   date: string;
   wheat: number;
   rice: number;
+  sugar: number;
   saree: number;
+  jowar: number;
   amount: number;
   portability: string;
   authTransTime?: string;

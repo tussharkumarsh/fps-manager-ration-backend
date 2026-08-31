@@ -15,7 +15,9 @@ interface TransactionRow {
   date: string;
   wheat: number;
   rice: number;
+  sugar: number;
   saree: number;
+  jowar: number;
   amount: number;
   portability: string;
   auth_trans_time: string | null;
@@ -37,7 +39,9 @@ function rowToTxn(row: TransactionRow): StoredTransaction {
     date: row.date,
     wheat: row.wheat,
     rice: row.rice,
+    sugar: row.sugar,
     saree: row.saree,
+    jowar: row.jowar,
     amount: row.amount,
     portability: row.portability,
     authTransTime: row.auth_trans_time || undefined,
@@ -67,7 +71,9 @@ function txnToRow(
     date: t.date,
     wheat: t.wheat,
     rice: t.rice,
+    sugar: t.sugar,
     saree: t.saree,
+    jowar: t.jowar,
     amount: t.amount,
     portability: t.portability,
     auth_trans_time: t.authTransTime || null,
