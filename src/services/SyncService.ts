@@ -21,12 +21,13 @@ export interface MonthDataResult {
 }
 
 /**
- * Implements the month-lock fetch decision:
- * - Current calendar month: always re-fetch from the gov API, upsert, keep status=live.
- * - Past months: fetch once, lock as synced_locked; afterwards always served
- *   from Supabase (cached in-memory) without hitting the gov API again.
- * - Lazy rollover: a month that's no longer current but still marked 'live'
- *   flips to 'synced_locked' the next time it's touched.
+ * The gov API is only ever called when a caller explicitly asks for
+ * forceRefresh (the Sync page's manual "Fetch and Parse" button). Every
+ * other read — including the automatic load on login/navigation — serves
+ * exactly what's already stored in Supabase, never triggering a live call.
+ * A month that receives real data via forceRefresh is locked as
+ * 'synced_locked' (except the current calendar month, which stays 'live'
+ * since it's still being added to on the gov side).
  */
 export class SyncService {
   private govApi = new GovApiClient();
@@ -52,63 +53,29 @@ export class SyncService {
     forceRefresh = false
   ): Promise<MonthDataResult> {
     const cacheKey = `${year}-${month}`;
-    const current = isCurrentMonth(year, month);
 
-    // Read-only callers (an admin browsing another dealer's data) must never
-    // trigger a live gov-API fetch-and-store — that would silently write new
-    // transaction data into a dealer's account as a side effect of an admin
-    // just looking at it. Only ever serve what's already stored.
-    if (readOnly) {
-      const lock = await this.lockRepo.get(fpsId, year, month);
-      const stored = await this.txnRepo.getForMonth(fpsId, year, month);
+    // View-only path — used for read-only (admin) callers, and for every
+    // ordinary login/navigation read. Never touches the gov API; just
+    // serves whatever is already in the DB (briefly cached to absorb
+    // repeated reads within a short window).
+    if (readOnly || !forceRefresh) {
+      const [lock, stored] = await Promise.all([
+        this.lockRepo.get(fpsId, year, month),
+        monthDataCache.getOrLoad(fpsId, () => this.txnRepo.getForMonth(fpsId, year, month), cacheKey),
+      ]);
       return { transactions: stored, source: "sheet_cache", lockStatus: lock?.status ?? "live" };
     }
 
-    if (current) {
-      // The current month's data changes throughout the day on the gov
-      // server, but a signed-in user shouldn't trigger a live gov-API call
-      // on every navigation/render. Fetch fresh once (forceRefresh, sent
-      // once per login by the client) and otherwise serve the short-lived
-      // in-memory cache — same cache used for locked past months.
-      if (!forceRefresh) {
-        const cached = await monthDataCache.getOrLoad(
-          fpsId,
-          async () => {
-            await this.fetchAndStore(distCode, fpsId, year, month, "live");
-            return this.txnRepo.getForMonth(fpsId, year, month);
-          },
-          cacheKey
-        );
-        return { transactions: cached, source: "sheet_cache", lockStatus: "live" };
-      }
-      const result = await this.fetchAndStore(distCode, fpsId, year, month, "live");
-      monthDataCache.invalidate(fpsId);
-      return { transactions: result, source: "gov_api", lockStatus: "live" };
-    }
-
-    let lock = await this.lockRepo.get(fpsId, year, month);
-
-    if (lock && lock.status === "live") {
-      lock = { ...lock, status: "synced_locked" };
-      await this.lockRepo.upsert(lock);
-    }
-
-    if (lock && lock.status === "synced_locked") {
-      const cached = await monthDataCache.getOrLoad(
-        fpsId,
-        () => this.txnRepo.getForMonth(fpsId, year, month),
-        cacheKey
-      );
-      return { transactions: cached, source: "sheet_cache", lockStatus: "synced_locked" };
-    }
-
-    const result = await this.fetchAndStore(distCode, fpsId, year, month, "synced_locked");
+    // forceRefresh — an explicit manual sync request. Always hits the gov
+    // API and stores the result, regardless of any existing lock.
+    const current = isCurrentMonth(year, month);
+    const result = await this.fetchAndStore(distCode, fpsId, year, month, current ? "live" : "synced_locked");
     monthDataCache.invalidate(fpsId);
     const newLock = await this.lockRepo.get(fpsId, year, month);
     return {
       transactions: result,
       source: "gov_api",
-      lockStatus: newLock?.status ?? "live",
+      lockStatus: newLock?.status ?? (current ? "live" : "synced_locked"),
     };
   }
 
