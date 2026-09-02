@@ -12,11 +12,9 @@ interface SummaryRowDb {
     month: string;
     scheme: string;
     commodity: string;
-    opening_stock: number;
     received_qty: number;
     distributed_qty: number;
     closing_stock: number;
-    carried_forward_qty: number;
     truck_chit_count: number;
     ro_count: number;
     imported_at?: string;
@@ -29,11 +27,9 @@ function rowToSummary(row: SummaryRowDb): InventoryMonthlySummary {
         month: row.month,
         scheme: row.scheme,
         commodity: row.commodity,
-        openingStock: Number(row.opening_stock || 0),
         receivedQty: Number(row.received_qty || 0),
         distributedQty: Number(row.distributed_qty || 0),
         closingStock: Number(row.closing_stock || 0),
-        carriedForwardQty: Number(row.carried_forward_qty || 0),
         truckChitCount: Number(row.truck_chit_count || 0),
         roCount: Number(row.ro_count || 0),
         importedAt: row.imported_at,
@@ -154,11 +150,9 @@ export class ScmInventoryRepository {
             month: row.month,
             scheme: row.scheme,
             commodity: row.commodity,
-            opening_stock: row.openingStock,
             received_qty: row.receivedQty,
             distributed_qty: row.distributedQty,
             closing_stock: row.closingStock,
-            carried_forward_qty: row.carriedForwardQty,
             truck_chit_count: row.truckChitCount || 0,
             ro_count: row.roCount || 0,
             imported_at: new Date().toISOString(),

@@ -140,12 +140,7 @@ export class ScmInventoryService {
     }
 
     // Re-runs calculateSummary for every already-synced month of the year,
-    // in order, using data already stored from prior SCM syncs (no portal
-    // fetch). Needed because calculateSummary reads each month's opening
-    // stock from the previous month's stored closing, so fixing the
-    // distributed-quantity logic requires recomputing months sequentially
-    // for the carry-forward chain to stay correct - not just the month
-    // that gets re-synced next.
+    // using data already stored from prior SCM syncs (no portal fetch).
     async recomputeYear(fpsId: string, year: string): Promise<void> {
         for (let m = 1; m <= 12; m++) {
             const month = String(m);
@@ -199,28 +194,20 @@ export class ScmInventoryService {
             }
         }
 
-        const previousMonth = this.previousMonth(year, month);
-        const prevRows = previousMonth ? await this.getPreviousSummaryRows(fpsId, previousMonth.year, previousMonth.month) : [];
-        const prevByKey = new Map(prevRows.map((row) => [`${row.scheme}|${row.commodity}`, row]));
-
         const summary: InventoryMonthlySummary[] = [];
         const order = Array.from(grouped.keys()).sort();
         for (const key of order) {
             const current = grouped.get(key)!;
-            const previousRow = prevByKey.get(key);
-            const openingStock = previousRow ? previousRow.closingStock : 0;
-            const closingStock = openingStock + current.received - current.distributed;
+            const closingStock = current.received - current.distributed;
             summary.push({
                 fpsId,
                 year,
                 month,
                 scheme: current.scheme,
                 commodity: current.commodity,
-                openingStock,
                 receivedQty: current.received,
                 distributedQty: current.distributed,
                 closingStock,
-                carriedForwardQty: closingStock,
                 truckChitCount: current.truckChitCount,
                 roCount: current.roCount,
             });
@@ -234,11 +221,9 @@ export class ScmInventoryService {
                     month,
                     scheme: "UNKNOWN",
                     commodity: "UNKNOWN",
-                    openingStock: 0,
                     receivedQty: 0,
                     distributedQty: 0,
                     closingStock: 0,
-                    carriedForwardQty: 0,
                     truckChitCount: 1,
                     roCount: 1,
                 });
@@ -246,18 +231,5 @@ export class ScmInventoryService {
         }
 
         return summary;
-    }
-
-    private previousMonth(year: string, month: string): { year: string; month: string; } | null {
-        const numericMonth = Number.parseInt(month, 10);
-        if (numericMonth <= 1) {
-            return { year: String(Number.parseInt(year, 10) - 1), month: "12" };
-        }
-        return { year, month: String(numericMonth - 1).padStart(2, "0") };
-    }
-
-    private async getPreviousSummaryRows(fpsId: string, year: string, month: string): Promise<InventoryMonthlySummary[]> {
-        const data = await this.repo.getSummaryForMonth(fpsId, year, month);
-        return data;
     }
 }

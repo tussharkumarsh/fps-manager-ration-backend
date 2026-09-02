@@ -71,7 +71,7 @@ router.post("/items", async (req, res) => {
 });
 
 router.post("/ledger", async (req, res) => {
-  const { fpsId, year, month, itemId, received, distributed, opening } = req.body ?? {};
+  const { fpsId, year, month, itemId, received, distributed } = req.body ?? {};
   if (!fpsId || !year || !month || !itemId) {
     res.status(400).json({ error: "fpsId, year, month and itemId are required" });
     return;
@@ -82,36 +82,11 @@ router.post("/ledger", async (req, res) => {
       entry = await inventoryService.setReceived(fpsId, year, month, itemId, Number(received) || 0);
     } else if (distributed !== undefined) {
       entry = await inventoryService.setManualDistributed(fpsId, year, month, itemId, Number(distributed) || 0);
-    } else if (opening !== undefined) {
-      entry = await inventoryService.setOpening(fpsId, year, month, itemId, Number(opening) || 0);
     } else {
-      res.status(400).json({ error: "received, distributed or opening is required" });
+      res.status(400).json({ error: "received or distributed is required" });
       return;
     }
     res.json({ success: true, entry });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
-  }
-});
-
-/** Bulk opening-balance setup across every item at once. */
-router.post("/opening-balances", async (req, res) => {
-  const { fpsId, year, month, balances } = req.body ?? {};
-  if (!fpsId || !year || !month || !Array.isArray(balances)) {
-    res.status(400).json({ error: "fpsId, year, month and balances[] are required" });
-    return;
-  }
-  try {
-    const entries = await inventoryService.setOpeningBalances(
-      fpsId,
-      year,
-      month,
-      balances.map((b: { itemId: string; opening: number }) => ({
-        itemId: b.itemId,
-        opening: Number(b.opening) || 0,
-      }))
-    );
-    res.json({ success: true, entries });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
@@ -165,7 +140,7 @@ router.post("/gov-stock/sync", async (req, res) => {
   }
 });
 
-/** Deletes every inventory item and ledger entry (all opening balances, history) for a dealer. */
+/** Deletes every inventory item and ledger entry for a dealer. */
 router.delete("/", async (req, res) => {
   const fpsId = String(req.query.fpsId || "");
   if (!fpsId) {

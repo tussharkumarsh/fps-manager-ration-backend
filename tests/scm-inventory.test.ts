@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {
     parseMonthlyRoListHtml,
     parseTruckChitHtml,
-    buildMonthlySummaryRows,
 } from '../src/lib/scmParser';
 import { parseEposHtml } from '../src/lib/eposParser';
 
@@ -111,18 +110,4 @@ test('parseEposHtml maps Wheat/Rice/Sugar/SAREE/Jowar to the correct fields, in 
         portability: 'Self',
         authTransTime: '00.1111',
     });
-});
-
-test('buildMonthlySummaryRows applies carry-forward by scheme and commodity', () => {
-    const rows = buildMonthlySummaryRows([
-        { year: '2026', month: '1', scheme: 'AAY', commodity: 'Rice', openingStock: 0, receivedQty: 100, distributedQty: 30, closingStock: 70, carriedForwardQty: 70 },
-        { year: '2026', month: '1', scheme: 'PHH', commodity: 'Rice', openingStock: 0, receivedQty: 80, distributedQty: 20, closingStock: 60, carriedForwardQty: 60 },
-        { year: '2026', month: '2', scheme: 'AAY', commodity: 'Rice', openingStock: 70, receivedQty: 50, distributedQty: 40, closingStock: 80, carriedForwardQty: 80 },
-        { year: '2026', month: '2', scheme: 'PHH', commodity: 'Rice', openingStock: 60, receivedQty: 20, distributedQty: 14, closingStock: 66, carriedForwardQty: 66 },
-    ]);
-
-    assert.equal(rows[0].openingStock, 0);
-    assert.equal(rows[2].openingStock, 70);
-    assert.equal(rows[3].openingStock, 60);
-    assert.equal(rows[3].closingStock, 66);
 });

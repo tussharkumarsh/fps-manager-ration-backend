@@ -141,11 +141,9 @@ export interface InventoryMonthlySummary {
   month: string;
   scheme: string;
   commodity: string;
-  openingStock: number;
   receivedQty: number;
   distributedQty: number;
   closingStock: number;
-  carriedForwardQty: number;
   truckChitCount: number;
   roCount: number;
   importedAt?: string;

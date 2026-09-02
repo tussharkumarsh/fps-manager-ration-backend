@@ -31,20 +31,6 @@ export interface TruckChitDetailRow {
     sourceIdentifier: string;
 }
 
-export interface MonthlySummaryRow {
-    year: string;
-    month: string;
-    scheme: string;
-    commodity: string;
-    openingStock: number;
-    receivedQty: number;
-    distributedQty: number;
-    closingStock: number;
-    carriedForwardQty: number;
-    truckChitCount?: number;
-    roCount?: number;
-}
-
 const num = (value: string) => {
     const cleaned = value.replace(/[,\s]/g, "").trim();
     const parsed = Number.parseFloat(cleaned || "0");
@@ -169,36 +155,4 @@ export function parseTruckChitHtml(
     return Array.from(merged.values()).filter(
         (row) => row.scheme && row.commodity && (row.allocatedQty > 0 || row.dispatchedQty > 0 || row.receivedQty > 0)
     );
-}
-
-export function buildMonthlySummaryRows(rows: MonthlySummaryRow[]): MonthlySummaryRow[] {
-    const latestByKey = new Map<string, MonthlySummaryRow>();
-    const ordered: MonthlySummaryRow[] = [];
-
-    const sorted = [...rows].sort((a, b) => {
-        const aKey = `${a.year}-${a.month.padStart(2, "0")}`;
-        const bKey = `${b.year}-${b.month.padStart(2, "0")}`;
-        return aKey.localeCompare(bKey);
-    });
-
-    for (const row of sorted) {
-        const key = `${row.scheme}|${row.commodity}`;
-        const previous = latestByKey.get(key);
-        const openingStock = row.openingStock > 0 ? row.openingStock : previous?.closingStock ?? 0;
-        const receivedQty = row.receivedQty || 0;
-        const distributedQty = row.distributedQty || 0;
-        const closingStock = openingStock + receivedQty - distributedQty;
-        const nextRow: MonthlySummaryRow = {
-            ...row,
-            openingStock,
-            receivedQty,
-            distributedQty,
-            closingStock,
-            carriedForwardQty: closingStock,
-        };
-        ordered.push(nextRow);
-        latestByKey.set(key, nextRow);
-    }
-
-    return ordered;
 }
