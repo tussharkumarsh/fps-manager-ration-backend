@@ -38,8 +38,9 @@ router.get("/", async (req, res) => {
     return;
   }
   const readOnly = req.query.readOnly === "true";
+  const forceRefresh = req.query.forceRefresh === "true";
   try {
-    const result = await syncService.getMonthData(distCode, fpsId, year, month, readOnly);
+    const result = await syncService.getMonthData(distCode, fpsId, year, month, readOnly, forceRefresh);
     res.json({
       success: true,
       transactions: result.transactions,

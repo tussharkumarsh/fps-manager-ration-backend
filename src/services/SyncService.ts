@@ -48,7 +48,8 @@ export class SyncService {
     fpsId: string,
     year: string,
     month: string,
-    readOnly = false
+    readOnly = false,
+    forceRefresh = false
   ): Promise<MonthDataResult> {
     const cacheKey = `${year}-${month}`;
     const current = isCurrentMonth(year, month);
@@ -64,6 +65,22 @@ export class SyncService {
     }
 
     if (current) {
+      // The current month's data changes throughout the day on the gov
+      // server, but a signed-in user shouldn't trigger a live gov-API call
+      // on every navigation/render. Fetch fresh once (forceRefresh, sent
+      // once per login by the client) and otherwise serve the short-lived
+      // in-memory cache — same cache used for locked past months.
+      if (!forceRefresh) {
+        const cached = await monthDataCache.getOrLoad(
+          fpsId,
+          async () => {
+            await this.fetchAndStore(distCode, fpsId, year, month, "live");
+            return this.txnRepo.getForMonth(fpsId, year, month);
+          },
+          cacheKey
+        );
+        return { transactions: cached, source: "sheet_cache", lockStatus: "live" };
+      }
       const result = await this.fetchAndStore(distCode, fpsId, year, month, "live");
       monthDataCache.invalidate(fpsId);
       return { transactions: result, source: "gov_api", lockStatus: "live" };
