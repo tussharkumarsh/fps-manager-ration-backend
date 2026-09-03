@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, fetchAllRows } from "../lib/supabase";
 import { rowKey } from "../lib/ids";
 import type { StoredTransaction, Transaction } from "../types";
 
@@ -84,34 +84,22 @@ function txnToRow(
 
 export class TransactionRepository {
   async getForMonth(fpsId: string, year: string, month: string): Promise<StoredTransaction[]> {
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("fps_id", fpsId.trim())
-      .eq("year", String(year).trim())
-      .eq("month", String(month).trim());
-    if (error) throw new Error(`TransactionRepository.getForMonth: ${error.message}`);
-    return (data as TransactionRow[]).map(rowToTxn);
-  }
-
-  async getAll(fpsId: string): Promise<StoredTransaction[]> {
-    // Supabase/PostgREST caps an unbounded select at 1000 rows by default,
-    // so a dealer with more than that across all synced months would
-    // silently lose whichever months fell past the cap. Page through in
-    // batches of 1000 until a page comes back short.
-    const pageSize = 1000;
-    const rows: TransactionRow[] = [];
-    for (let from = 0; ; from += pageSize) {
-      const { data, error } = await supabase
+    const rows = await fetchAllRows<TransactionRow>((from, to) =>
+      supabase
         .from("transactions")
         .select("*")
         .eq("fps_id", fpsId.trim())
-        .range(from, from + pageSize - 1);
-      if (error) throw new Error(`TransactionRepository.getAll: ${error.message}`);
-      const page = data as TransactionRow[];
-      rows.push(...page);
-      if (page.length < pageSize) break;
-    }
+        .eq("year", String(year).trim())
+        .eq("month", String(month).trim())
+        .range(from, to)
+    );
+    return rows.map(rowToTxn);
+  }
+
+  async getAll(fpsId: string): Promise<StoredTransaction[]> {
+    const rows = await fetchAllRows<TransactionRow>((from, to) =>
+      supabase.from("transactions").select("*").eq("fps_id", fpsId.trim()).range(from, to)
+    );
     return rows.map(rowToTxn);
   }
 

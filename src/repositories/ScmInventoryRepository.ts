@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, fetchAllRows } from "../lib/supabase";
 import type {
     InventoryMonthlySummary,
     ScmInventoryTransaction,
@@ -125,16 +125,18 @@ export class ScmInventoryRepository {
     }
 
     async getSummaryForYear(fpsId: string, year: string): Promise<InventoryMonthlySummary[]> {
-        const { data, error } = await supabase
-            .from("scm_inventory_summary")
-            .select("*")
-            .eq("fps_id", fpsId.trim())
-            .eq("year", String(year).trim())
-            .order("month")
-            .order("scheme")
-            .order("commodity");
-        if (error) throw new Error(`ScmInventoryRepository.getSummaryForYear: ${error.message}`);
-        return ((data as SummaryRowDb[]) || []).map(rowToSummary);
+        const rows = await fetchAllRows<SummaryRowDb>((from, to) =>
+            supabase
+                .from("scm_inventory_summary")
+                .select("*")
+                .eq("fps_id", fpsId.trim())
+                .eq("year", String(year).trim())
+                .order("month")
+                .order("scheme")
+                .order("commodity")
+                .range(from, to)
+        );
+        return rows.map(rowToSummary);
     }
 
     async replaceSummaryRows(fpsId: string, year: string, month: string, rows: InventoryMonthlySummary[]): Promise<number> {
@@ -195,14 +197,16 @@ export class ScmInventoryRepository {
     }
 
     async getMonthTransactions(fpsId: string, year: string, month: string): Promise<ScmInventoryTransaction[]> {
-        const { data, error } = await supabase
-            .from("scm_inventory_transactions")
-            .select("*")
-            .eq("fps_id", fpsId.trim())
-            .eq("year", String(year).trim())
-            .eq("month", String(month).trim());
-        if (error) throw new Error(`ScmInventoryRepository.getMonthTransactions: ${error.message}`);
-        return ((data as any[]) || []).map((row) => ({
+        const data = await fetchAllRows<any>((from, to) =>
+            supabase
+                .from("scm_inventory_transactions")
+                .select("*")
+                .eq("fps_id", fpsId.trim())
+                .eq("year", String(year).trim())
+                .eq("month", String(month).trim())
+                .range(from, to)
+        );
+        return data.map((row) => ({
             fpsId: row.fps_id,
             truckChitNo: row.truck_chit_no,
             roNo: row.ro_no,

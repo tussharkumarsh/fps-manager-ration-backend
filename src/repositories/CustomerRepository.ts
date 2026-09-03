@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, fetchAllRows } from "../lib/supabase";
 import type { Customer } from "../types";
 
 interface CustomerRow {
@@ -64,9 +64,10 @@ function customerToRow(fpsId: string, c: Customer): WritableCustomerRow {
 
 export class CustomerRepository {
   async getAll(fpsId: string): Promise<Customer[]> {
-    const { data, error } = await supabase.from("customers").select("*").eq("fps_id", fpsId.trim());
-    if (error) throw new Error(`CustomerRepository.getAll: ${error.message}`);
-    return (data as CustomerRow[]).map(rowToCustomer);
+    const rows = await fetchAllRows<CustomerRow>((from, to) =>
+      supabase.from("customers").select("*").eq("fps_id", fpsId.trim()).range(from, to)
+    );
+    return rows.map(rowToCustomer);
   }
 
   /**
@@ -83,13 +84,11 @@ export class CustomerRepository {
     // one value per imported row: a bulk import of hundreds of customers
     // would otherwise build a query string with hundreds of values, which
     // risks hitting a request/URL size limit on Supabase's REST gateway.
-    const { data: existingRows, error: readError } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("fps_id", trimmed);
-    if (readError) throw new Error(`CustomerRepository.upsertMany (read): ${readError.message}`);
+    const existingRows = await fetchAllRows<CustomerRow>((from, to) =>
+      supabase.from("customers").select("*").eq("fps_id", trimmed).range(from, to)
+    );
 
-    const existingBySrcNo = new Map((existingRows as CustomerRow[]).map((r) => [r.src_no, r]));
+    const existingBySrcNo = new Map(existingRows.map((r) => [r.src_no, r]));
 
     const merged = customers.map((c) => {
       const incomingRow = customerToRow(trimmed, c);
