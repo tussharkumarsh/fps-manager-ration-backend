@@ -95,9 +95,24 @@ export class TransactionRepository {
   }
 
   async getAll(fpsId: string): Promise<StoredTransaction[]> {
-    const { data, error } = await supabase.from("transactions").select("*").eq("fps_id", fpsId.trim());
-    if (error) throw new Error(`TransactionRepository.getAll: ${error.message}`);
-    return (data as TransactionRow[]).map(rowToTxn);
+    // Supabase/PostgREST caps an unbounded select at 1000 rows by default,
+    // so a dealer with more than that across all synced months would
+    // silently lose whichever months fell past the cap. Page through in
+    // batches of 1000 until a page comes back short.
+    const pageSize = 1000;
+    const rows: TransactionRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("fps_id", fpsId.trim())
+        .range(from, from + pageSize - 1);
+      if (error) throw new Error(`TransactionRepository.getAll: ${error.message}`);
+      const page = data as TransactionRow[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return rows.map(rowToTxn);
   }
 
   async upsertMany(
