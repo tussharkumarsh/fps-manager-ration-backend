@@ -1,82 +1,90 @@
 import * as cheerio from "cheerio";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
-// Fixed leading columns present in every variant of the government "Qty in Kgs"
-// table: Sl No, SRC No, Scheme, Avail Type, Receipt No, Date. After that come a
-// variable set of commodity columns (Wheat/Rice/Sugar always present; SAREE and
-// Jowar are mutually exclusive depending on what that FPS distributes), then
-// Amount, Portability, Auth Trans Time. Column positions are therefore located
-// by header text rather than assumed to be fixed, so a shop whose table has no
-// SAREE column doesn't get Jowar's value misread as saree (and Amount as jowar).
-//
-// The government page doesn't reliably wrap the header row in <thead> (and may
-// not use <th> at all), so the header can't be found via a fixed selector like
-// "#Report thead tr". Instead every row in the table is scanned for the one
-// containing both "Wheat" and "Portability" text — that's the header row,
-// wherever it lives in the DOM — and it's excluded from the data rows by
-// object identity.
-function findHeaderIndex($: cheerio.CheerioAPI, headerCells: cheerio.Cheerio<import("domhandler").Element>, label: string): number {
-  let found = -1;
-  headerCells.each((idx, cell) => {
-    if (found === -1 && $(cell).text().trim().toUpperCase().includes(label.toUpperCase())) {
-      found = idx;
-    }
-  });
-  return found;
+// The government table's <thead> has TWO header rows, not one:
+//   row A: Sl No, SRC No, Scheme, Avail Type, Receipt No, Date (rowspan=2),
+//          a single "Qty in Kgs" cell spanning N commodity columns,
+//          then Amount, Portability, Auth Trans Time (rowspan=2)
+//   row B: the N leaf labels for the "Qty in Kgs" group — e.g. Wheat, Rice,
+//          Sugar, Jowar for shops with no Saree column; other shops may have
+//          a different set/count (a Saree column instead of/alongside Jowar).
+// So no single row contains both "Wheat" and "Portability" text, and the
+// column position of each commodity has to be read from row B while the
+// leading (6) and trailing (Amount/Portability/Auth Trans Time) columns are
+// read from row A around its colspan placeholder.
+function labelIndex(cells: { text: string }[], label: string): number {
+  return cells.findIndex((c) => c.text.toUpperCase().includes(label.toUpperCase()));
 }
 
 export function parseEposHtml(html: string): Transaction[] {
   const $ = cheerio.load(html);
   const transactions: Transaction[] = [];
 
-  const allRows = $("#Report tr").toArray();
-  const headerRowEl = allRows.find((row) => {
-    const text = $(row).text().toUpperCase();
-    return text.includes("WHEAT") && text.includes("PORTABILITY");
-  });
-
+  const LEADING = 6;
   let wheatIdx = -1, riceIdx = -1, sugarIdx = -1, sareeIdx = -1, jowarIdx = -1;
   let amountIdx = -1, portabilityIdx = -1, authTimeIdx = -1;
   let hasHeaderMap = false;
 
-  if (headerRowEl) {
-    const headerCells = $(headerRowEl).find("th, td");
-    wheatIdx = findHeaderIndex($, headerCells, "Wheat");
-    riceIdx = findHeaderIndex($, headerCells, "Rice");
-    sugarIdx = findHeaderIndex($, headerCells, "Sugar");
-    sareeIdx = findHeaderIndex($, headerCells, "SAREE");
-    jowarIdx = findHeaderIndex($, headerCells, "Jowar");
-    amountIdx = findHeaderIndex($, headerCells, "Amount");
-    portabilityIdx = findHeaderIndex($, headerCells, "Portability");
-    authTimeIdx = findHeaderIndex($, headerCells, "Auth Trans Time");
+  const theadRows = $("#Report thead tr").toArray();
+  if (theadRows.length >= 2) {
+    const subHeaderRow = theadRows[theadRows.length - 1];
+    const upperRow = theadRows[theadRows.length - 2];
+    const subCells = $(subHeaderRow)
+      .find("th, td")
+      .toArray()
+      .map((c) => ({ text: $(c).text().trim() }));
+    const upperCells = $(upperRow)
+      .find("th, td")
+      .toArray()
+      .map((c) => ({ text: $(c).text().trim() }));
+    // upperRow = 6 leading cells + 1 "Qty in Kgs" placeholder + trailing cells.
+    const trailingCells = upperCells.slice(LEADING + 1);
+
+    const w = labelIndex(subCells, "Wheat");
+    const r = labelIndex(subCells, "Rice");
+    const s = labelIndex(subCells, "Sugar");
+    const sa = labelIndex(subCells, "SAREE");
+    const j = labelIndex(subCells, "Jowar");
+    if (w !== -1) wheatIdx = LEADING + w;
+    if (r !== -1) riceIdx = LEADING + r;
+    if (s !== -1) sugarIdx = LEADING + s;
+    if (sa !== -1) sareeIdx = LEADING + sa;
+    if (j !== -1) jowarIdx = LEADING + j;
+
+    const trailingStart = LEADING + subCells.length;
+    const a = labelIndex(trailingCells, "Amount");
+    const p = labelIndex(trailingCells, "Portability");
+    const at = labelIndex(trailingCells, "Auth Trans Time");
+    if (a !== -1) amountIdx = trailingStart + a;
+    if (p !== -1) portabilityIdx = trailingStart + p;
+    if (at !== -1) authTimeIdx = trailingStart + at;
+
     hasHeaderMap = wheatIdx !== -1 && riceIdx !== -1 && amountIdx !== -1 && portabilityIdx !== -1;
   }
 
   let i = 0;
-  for (const row of allRows) {
-    if (row === headerRowEl) continue;
+  $("#Report tbody tr").each((_, row) => {
     const cells = $(row).find("td");
-    if (cells.length < 13) continue;
+    if (cells.length < LEADING + 1) return;
     const slNo = parseInt($(cells[0]).text().trim(), 10);
-    if (!Number.isFinite(slNo)) continue;
+    if (!Number.isFinite(slNo)) return;
 
     const cellText = (idx: number) => (idx === -1 ? "" : $(cells[idx]).text().trim());
     const cellNum = (idx: number) => (idx === -1 ? 0 : parseFloat($(cells[idx]).text().trim()) || 0);
 
     const receiptNo = $(cells[4]).text().trim();
 
-    // Fallback to the legacy fixed layout (Wheat, Rice, Sugar, SAREE, Jowar,
-    // Amount, Portability at cells 6-12) if the header row couldn't be found.
+    // Fallback to the observed default layout (Wheat, Rice, Sugar, Jowar,
+    // Amount, Portability, Auth Trans Time at cells 6-12, no Saree column)
+    // if the two-row header couldn't be parsed.
     const wheat = hasHeaderMap ? cellNum(wheatIdx) : parseFloat($(cells[6]).text().trim()) || 0;
     const rice = hasHeaderMap ? cellNum(riceIdx) : parseFloat($(cells[7]).text().trim()) || 0;
     const sugar = hasHeaderMap ? cellNum(sugarIdx) : parseFloat($(cells[8]).text().trim()) || 0;
-    const saree = hasHeaderMap ? cellNum(sareeIdx) : parseFloat($(cells[9]).text().trim()) || 0;
-    const jowar = hasHeaderMap ? cellNum(jowarIdx) : parseFloat($(cells[10]).text().trim()) || 0;
-    const amount = hasHeaderMap ? cellNum(amountIdx) : parseFloat($(cells[11]).text().trim()) || 0;
-    const portability = hasHeaderMap ? cellText(portabilityIdx) : $(cells[12]).text().trim();
-    const authTransTime = hasHeaderMap
-      ? (authTimeIdx === -1 ? undefined : cellText(authTimeIdx))
-      : (cells.length >= 14 ? $(cells[13]).text().trim() : undefined);
+    const saree = hasHeaderMap ? cellNum(sareeIdx) : 0;
+    const jowar = hasHeaderMap ? cellNum(jowarIdx) : parseFloat($(cells[9]).text().trim()) || 0;
+    const amount = hasHeaderMap ? cellNum(amountIdx) : parseFloat($(cells[10]).text().trim()) || 0;
+    const portability = hasHeaderMap ? cellText(portabilityIdx) : $(cells[11]).text().trim();
+    const authTransTime = hasHeaderMap ? cellText(authTimeIdx) || undefined : cellText(12) || undefined;
 
     transactions.push({
       id: receiptNo,
@@ -96,7 +104,7 @@ export function parseEposHtml(html: string): Transaction[] {
       authTransTime,
     });
     i++;
-  }
+  });
 
   return transactions;
 }
