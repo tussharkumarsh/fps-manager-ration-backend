@@ -8,8 +8,13 @@ import type { Transaction, GovStockRegisterEntry } from "../types";
 // Amount, Portability, Auth Trans Time. Column positions are therefore located
 // by header text rather than assumed to be fixed, so a shop whose table has no
 // SAREE column doesn't get Jowar's value misread as saree (and Amount as jowar).
-const LEADING_COLUMNS = 6;
-
+//
+// The government page doesn't reliably wrap the header row in <thead> (and may
+// not use <th> at all), so the header can't be found via a fixed selector like
+// "#Report thead tr". Instead every row in the table is scanned for the one
+// containing both "Wheat" and "Portability" text — that's the header row,
+// wherever it lives in the DOM — and it's excluded from the data rows by
+// object identity.
 function findHeaderIndex($: cheerio.CheerioAPI, headerCells: cheerio.Cheerio<import("domhandler").Element>, label: string): number {
   let found = -1;
   headerCells.each((idx, cell) => {
@@ -24,23 +29,36 @@ export function parseEposHtml(html: string): Transaction[] {
   const $ = cheerio.load(html);
   const transactions: Transaction[] = [];
 
-  const headerRow = $("#Report thead tr").last();
-  const headerCells = headerRow.find("th, td");
+  const allRows = $("#Report tr").toArray();
+  const headerRowEl = allRows.find((row) => {
+    const text = $(row).text().toUpperCase();
+    return text.includes("WHEAT") && text.includes("PORTABILITY");
+  });
 
-  const wheatIdx = findHeaderIndex($, headerCells, "Wheat");
-  const riceIdx = findHeaderIndex($, headerCells, "Rice");
-  const sugarIdx = findHeaderIndex($, headerCells, "Sugar");
-  const sareeIdx = findHeaderIndex($, headerCells, "SAREE");
-  const jowarIdx = findHeaderIndex($, headerCells, "Jowar");
-  const amountIdx = findHeaderIndex($, headerCells, "Amount");
-  const portabilityIdx = findHeaderIndex($, headerCells, "Portability");
-  const authTimeIdx = findHeaderIndex($, headerCells, "Auth Trans Time");
+  let wheatIdx = -1, riceIdx = -1, sugarIdx = -1, sareeIdx = -1, jowarIdx = -1;
+  let amountIdx = -1, portabilityIdx = -1, authTimeIdx = -1;
+  let hasHeaderMap = false;
 
-  const hasHeaderMap = wheatIdx !== -1 && riceIdx !== -1 && amountIdx !== -1 && portabilityIdx !== -1;
+  if (headerRowEl) {
+    const headerCells = $(headerRowEl).find("th, td");
+    wheatIdx = findHeaderIndex($, headerCells, "Wheat");
+    riceIdx = findHeaderIndex($, headerCells, "Rice");
+    sugarIdx = findHeaderIndex($, headerCells, "Sugar");
+    sareeIdx = findHeaderIndex($, headerCells, "SAREE");
+    jowarIdx = findHeaderIndex($, headerCells, "Jowar");
+    amountIdx = findHeaderIndex($, headerCells, "Amount");
+    portabilityIdx = findHeaderIndex($, headerCells, "Portability");
+    authTimeIdx = findHeaderIndex($, headerCells, "Auth Trans Time");
+    hasHeaderMap = wheatIdx !== -1 && riceIdx !== -1 && amountIdx !== -1 && portabilityIdx !== -1;
+  }
 
-  $("#Report tbody tr").each((i, row) => {
+  let i = 0;
+  for (const row of allRows) {
+    if (row === headerRowEl) continue;
     const cells = $(row).find("td");
-    if (cells.length < LEADING_COLUMNS + 1) return;
+    if (cells.length < 13) continue;
+    const slNo = parseInt($(cells[0]).text().trim(), 10);
+    if (!Number.isFinite(slNo)) continue;
 
     const cellText = (idx: number) => (idx === -1 ? "" : $(cells[idx]).text().trim());
     const cellNum = (idx: number) => (idx === -1 ? 0 : parseFloat($(cells[idx]).text().trim()) || 0);
@@ -48,7 +66,7 @@ export function parseEposHtml(html: string): Transaction[] {
     const receiptNo = $(cells[4]).text().trim();
 
     // Fallback to the legacy fixed layout (Wheat, Rice, Sugar, SAREE, Jowar,
-    // Amount, Portability at cells 6-12) if the header row couldn't be parsed.
+    // Amount, Portability at cells 6-12) if the header row couldn't be found.
     const wheat = hasHeaderMap ? cellNum(wheatIdx) : parseFloat($(cells[6]).text().trim()) || 0;
     const rice = hasHeaderMap ? cellNum(riceIdx) : parseFloat($(cells[7]).text().trim()) || 0;
     const sugar = hasHeaderMap ? cellNum(sugarIdx) : parseFloat($(cells[8]).text().trim()) || 0;
@@ -62,7 +80,7 @@ export function parseEposHtml(html: string): Transaction[] {
 
     transactions.push({
       id: receiptNo,
-      slNo: parseInt($(cells[0]).text().trim()) || i + 1,
+      slNo: slNo || i + 1,
       srcNo: $(cells[1]).text().trim(),
       scheme: $(cells[2]).text().trim() as "PHH" | "AAY",
       availType: $(cells[3]).text().trim() as "Authenticated" | "OTP" | "IRIS",
@@ -77,7 +95,8 @@ export function parseEposHtml(html: string): Transaction[] {
       portability,
       authTransTime,
     });
-  });
+    i++;
+  }
 
   return transactions;
 }
