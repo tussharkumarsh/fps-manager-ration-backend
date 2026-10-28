@@ -205,3 +205,16 @@ create index if not exists scm_inventory_summary_lookup_idx on scm_inventory_sum
 -- RLS stays disabled: all access goes through the backend service using the
 -- service_role key, which bypasses RLS entirely. No table should ever be
 -- queried directly from the browser with the anon key.
+
+-- Hand-entered goshwara (monthly summary) per FPS per month, kept alongside
+-- the one computed from transactions so dealers can record the figures from
+-- their manual register. `entries` maps a particular key (e.g. "wheat") to
+-- { phh, aay }.
+create table if not exists manual_goshwara (
+  fps_id text not null,
+  year text not null,
+  month text not null,
+  entries jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (fps_id, year, month)
+);

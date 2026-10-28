@@ -169,6 +169,17 @@ export interface MonthLock {
   recordCount: number;
 }
 
+/** Particular key (e.g. "wheat") -> hand-entered PHH/AAY figures. */
+export type ManualGoshwaraEntries = Record<string, { phh: number; aay: number }>;
+
+export interface ManualGoshwara {
+  fpsId: string;
+  year: string;
+  month: string;
+  entries: ManualGoshwaraEntries;
+  updatedAt: string;
+}
+
 export interface StoredTransaction extends Transaction {
   fpsId: string;
   year: string;

@@ -8,6 +8,7 @@ import transactionRoutes from "./routes/transactions";
 import inventoryRoutes from "./routes/inventory";
 import scmInventoryRoutes from "./routes/scmInventory";
 import resetAllRoutes from "./routes/resetAll";
+import goshwaraRoutes from "./routes/goshwara";
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || "").split(",").map((o) => o.trim());
@@ -43,5 +44,6 @@ app.use("/transactions", transactionRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/inventory/scm", scmInventoryRoutes);
 app.use("/reset-all", resetAllRoutes);
+app.use("/goshwara", goshwaraRoutes);
 
 export default app;
