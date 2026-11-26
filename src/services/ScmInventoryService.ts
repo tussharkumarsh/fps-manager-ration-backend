@@ -3,7 +3,7 @@ import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { buildMonthSummary } from "../lib/scmSummary";
-import { currentIstYearMonth, previousMonth } from "../lib/ids";
+import { currentIstYearMonth, monthsFrom, previousMonth } from "../lib/ids";
 import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
 
 export class ScmInventoryService {
@@ -132,22 +132,20 @@ export class ScmInventoryService {
     }
 
     /**
-     * Rebuilds the stored summary for fromMonth through the last month of
-     * the year (or the current IST month, for the current year), in order,
-     * so each month opens with the previous month's closing. Uses data
-     * already stored from SCM and ePOS syncs — no portal fetch.
+     * Rebuilds the stored summary for (year, fromMonth) through the current
+     * IST month — crossing into later years, so a December change reaches
+     * the next January — in order, so each month opens with the previous
+     * month's closing. Uses data already stored from SCM and ePOS syncs — no
+     * portal fetch.
      */
     async recomputeFrom(fpsId: string, year: string, fromMonth: string): Promise<void> {
-        const now = currentIstYearMonth();
-        if (Number(year) > Number(now.year)) return;
-        const lastMonth = year === now.year ? Number(now.month) : 12;
-        const start = Number(fromMonth);
+        const months = monthsFrom(year, fromMonth, currentIstYearMonth());
+        if (months.length === 0) return;
 
-        const before = previousMonth(year, String(start));
+        const before = previousMonth(year, String(Number(fromMonth)));
         let previous = await this.repo.getSummaryForMonth(fpsId, before.year, before.month);
 
-        for (let m = start; m <= lastMonth; m++) {
-            const month = String(m);
+        for (const { year, month } of months) {
             const [scmTxns, localTxns] = await Promise.all([
                 this.repo.getMonthTransactions(fpsId, year, month),
                 this.txnRepo.getForMonth(fpsId, year, month),

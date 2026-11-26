@@ -21,6 +21,21 @@ export function currentIstYearMonth(now: Date = new Date()): { year: string; mon
   return { year, month: String(parseInt(month, 10)) };
 }
 
+/** Every month from (year, fromMonth) through `now`, inclusive, crossing year ends. Empty if the start is after now. */
+export function monthsFrom(
+  year: string,
+  fromMonth: string,
+  now: { year: string; month: string }
+): { year: string; month: string }[] {
+  const out: { year: string; month: string }[] = [];
+  const end = Number(now.year) * 12 + Number(now.month);
+  for (let k = Number(year) * 12 + Number(fromMonth); k <= end; k++) {
+    const y = Math.floor((k - 1) / 12);
+    out.push({ year: String(y), month: String(k - y * 12) });
+  }
+  return out;
+}
+
 export function previousMonth(year: string, month: string): { year: string; month: string } {
   const y = parseInt(year, 10);
   const m = parseInt(month, 10);
