@@ -99,6 +99,24 @@ export class TransactionRepository {
     return rows.map(rowToTxn);
   }
 
+  /** Number of stored transactions per month of a year, keyed by unpadded month ("1".."12"). */
+  async countsForYear(fpsId: string, year: string): Promise<Map<string, number>> {
+    const rows = await fetchAllRows<{ month: string }>((from, to) =>
+      supabase
+        .from("transactions")
+        .select("month")
+        .eq("fps_id", fpsId.trim())
+        .eq("year", String(year).trim())
+        .range(from, to)
+    );
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const m = String(parseInt(r.month, 10));
+      counts.set(m, (counts.get(m) || 0) + 1);
+    }
+    return counts;
+  }
+
   async getAll(fpsId: string): Promise<StoredTransaction[]> {
     const rows = await fetchAllRows<TransactionRow>((from, to) =>
       supabase.from("transactions").select("*").eq("fps_id", fpsId.trim()).range(from, to)

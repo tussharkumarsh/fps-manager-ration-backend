@@ -45,8 +45,17 @@ export class SyncService {
     await this.lockRepo.clearAll(fpsId);
   }
 
-  async listLocks(fpsId: string, year: string): Promise<MonthLock[]> {
-    return this.lockRepo.listForYear(fpsId, year);
+  /**
+   * Month locks for a year, each with how many transactions are actually
+   * stored for that month — a lock can outlive its data (e.g. after a
+   * reset), and such a month must still count as missing.
+   */
+  async listLocks(fpsId: string, year: string): Promise<(MonthLock & { storedCount: number })[]> {
+    const [locks, counts] = await Promise.all([
+      this.lockRepo.listForYear(fpsId, year),
+      this.txnRepo.countsForYear(fpsId, year),
+    ]);
+    return locks.map((l) => ({ ...l, storedCount: counts.get(String(parseInt(l.month, 10))) || 0 }));
   }
 
   async getMonthData(
