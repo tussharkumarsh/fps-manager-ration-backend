@@ -143,6 +143,8 @@ export interface InventoryMonthlySummary {
   month: string;
   scheme: string;
   commodity: string;
+  /** Previous month's closing for the same scheme × commodity. */
+  openingStock: number;
   receivedQty: number;
   distributedQty: number;
   closingStock: number;

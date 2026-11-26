@@ -1,26 +1,9 @@
 import { ScmApiClient } from "../lib/scmApiClient";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
-import type { InventoryMonthlySummary, ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
-
-// The SCM portal's own "dispatched" figure reflects what the government
-// dispatched to us, not what we actually handed out to customers. For the
-// commodities our local transaction ledger tracks (wheat/rice/sugar/saree
-// kit/jowar), "distributed" should reflect our own recorded sales instead -
-// so the summary stays consistent with the rest of the app rather than the
-// portal's dispatch record.
-const COMMODITY_TX_FIELD: Record<string, "wheat" | "rice" | "sugar" | "saree" | "jowar"> = {
-    wheat: "wheat",
-    rice: "rice",
-    sugar: "sugar",
-    saree: "saree",
-    "saree kit": "saree",
-    jowar: "jowar",
-};
-
-function txFieldForCommodity(commodity: string): "wheat" | "rice" | "sugar" | "saree" | "jowar" | null {
-    return COMMODITY_TX_FIELD[commodity.trim().toLowerCase()] || null;
-}
+import { buildMonthSummary } from "../lib/scmSummary";
+import { currentIstYearMonth, previousMonth } from "../lib/ids";
+import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
 
 export class ScmInventoryService {
     private readonly repo = new ScmInventoryRepository();
@@ -123,13 +106,11 @@ export class ScmInventoryService {
         await this.repo.upsertTruckChits(truckChits);
         await this.repo.upsertTransactions(transactions);
 
-        // Recompute from all transactions synced for the month so far (not just this
-        // batch's), otherwise a batch-scoped sync would wipe out prior batches' summary.
-        const monthTruckChitCount = normalizedBatchNo ? (await this.repo.getMonthCounts(fpsId, year, month)).truckChitCount : truckChits.length;
-        const monthTransactions = normalizedBatchNo ? await this.repo.getMonthTransactions(fpsId, year, month) : transactions;
-
-        const summary = await this.calculateSummary(fpsId, year, month, monthTruckChitCount, monthTransactions);
-        await this.repo.replaceSummaryRows(fpsId, year, month, summary);
+        // Recompute this month (from everything stored for it, not just this
+        // batch) and every later month, since each month's opening is the
+        // previous month's closing.
+        await this.recomputeFrom(fpsId, year, month);
+        const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
 
         return {
             roCount: roRecords.length,
@@ -139,97 +120,39 @@ export class ScmInventoryService {
         };
     }
 
-    // Re-runs calculateSummary for every already-synced month of the year,
-    // using data already stored from prior SCM syncs (no portal fetch).
-    async recomputeYear(fpsId: string, year: string): Promise<void> {
-        for (let m = 1; m <= 12; m++) {
-            const month = String(m);
-            const monthTransactions = await this.repo.getMonthTransactions(fpsId, year, month);
-            const { truckChitCount } = await this.repo.getMonthCounts(fpsId, year, month);
-            if (monthTransactions.length === 0 && truckChitCount === 0) continue;
-
-            const summary = await this.calculateSummary(fpsId, year, month, truckChitCount, monthTransactions);
-            await this.repo.replaceSummaryRows(fpsId, year, month, summary);
-        }
-    }
-
     private buildTruckChitPattern(roNo: string): string {
         const formatted = roNo.replace(/^RO\//, "").replace(/\//g, "-");
         return `TC-${formatted}`;
     }
 
-    async calculateSummary(
-        fpsId: string,
-        year: string,
-        month: string,
-        truckChitCount: number,
-        transactions: ScmInventoryTransaction[]
-    ): Promise<InventoryMonthlySummary[]> {
-        const grouped = new Map<string, { scheme: string; commodity: string; received: number; distributed: number; truckChitCount: number; roCount: number; }>();
+    async recomputeYear(fpsId: string, year: string): Promise<void> {
+        await this.recomputeFrom(fpsId, year, "1");
+    }
 
-        for (const txn of transactions) {
-            const key = `${txn.scheme}|${txn.commodity}`;
-            const current = grouped.get(key) || { scheme: txn.scheme, commodity: txn.commodity, received: 0, distributed: 0, truckChitCount: 0, roCount: 0 };
-            current.received += txn.receivedQty;
-            current.distributed += txn.dispatchedQty;
-            current.truckChitCount = Math.max(current.truckChitCount, 1);
-            grouped.set(key, current);
-        }
+    /**
+     * Rebuilds the stored summary for fromMonth through the last month of
+     * the year (or the current IST month, for the current year), in order,
+     * so each month opens with the previous month's closing. Uses data
+     * already stored from SCM and ePOS syncs — no portal fetch.
+     */
+    async recomputeFrom(fpsId: string, year: string, fromMonth: string): Promise<void> {
+        const now = currentIstYearMonth();
+        if (Number(year) > Number(now.year)) return;
+        const lastMonth = year === now.year ? Number(now.month) : 12;
+        const start = Number(fromMonth);
 
-        // Override "distributed" with our own recorded sales for the
-        // commodities the local transaction ledger tracks, summed per
-        // scheme so AAY and PHH quantities don't get mixed together.
-        const localTxns = await this.txnRepo.getForMonth(fpsId, year, month);
-        const localDistributed = new Map<string, number>();
-        for (const txn of localTxns) {
-            for (const field of ["wheat", "rice", "sugar", "saree", "jowar"] as const) {
-                const key = `${txn.scheme}|${field}`;
-                localDistributed.set(key, (localDistributed.get(key) || 0) + (txn[field] || 0));
-            }
-        }
-        for (const current of grouped.values()) {
-            const txField = txFieldForCommodity(current.commodity);
-            if (txField) {
-                current.distributed = localDistributed.get(`${current.scheme}|${txField}`) || 0;
-            }
-        }
+        const before = previousMonth(year, String(start));
+        let previous = await this.repo.getSummaryForMonth(fpsId, before.year, before.month);
 
-        const summary: InventoryMonthlySummary[] = [];
-        const order = Array.from(grouped.keys()).sort();
-        for (const key of order) {
-            const current = grouped.get(key)!;
-            const closingStock = current.received - current.distributed;
-            summary.push({
-                fpsId,
-                year,
-                month,
-                scheme: current.scheme,
-                commodity: current.commodity,
-                receivedQty: current.received,
-                distributedQty: current.distributed,
-                closingStock,
-                truckChitCount: current.truckChitCount,
-                roCount: current.roCount,
-            });
+        for (let m = start; m <= lastMonth; m++) {
+            const month = String(m);
+            const [scmTxns, localTxns] = await Promise.all([
+                this.repo.getMonthTransactions(fpsId, year, month),
+                this.txnRepo.getForMonth(fpsId, year, month),
+            ]);
+            const summary = buildMonthSummary({ fpsId, year, month, scmTxns, localTxns, previous });
+            await this.repo.replaceSummaryRows(fpsId, year, month, summary);
+            previous = summary;
         }
-
-        if (!summary.length && truckChitCount > 0) {
-            for (let i = 0; i < truckChitCount; i++) {
-                summary.push({
-                    fpsId,
-                    year,
-                    month,
-                    scheme: "UNKNOWN",
-                    commodity: "UNKNOWN",
-                    receivedQty: 0,
-                    distributedQty: 0,
-                    closingStock: 0,
-                    truckChitCount: 1,
-                    roCount: 1,
-                });
-            }
-        }
-
-        return summary;
     }
 }
