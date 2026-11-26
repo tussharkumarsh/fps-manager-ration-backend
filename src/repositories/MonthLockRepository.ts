@@ -34,6 +34,16 @@ export class MonthLockRepository {
     return data ? rowToLock(data as MonthLockRow) : null;
   }
 
+  async listForYear(fpsId: string, year: string): Promise<MonthLock[]> {
+    const { data, error } = await supabase
+      .from("month_locks")
+      .select("*")
+      .eq("fps_id", fpsId.trim())
+      .eq("year", String(year).trim());
+    if (error) throw new Error(`MonthLockRepository.listForYear: ${error.message}`);
+    return ((data as MonthLockRow[]) || []).map(rowToLock);
+  }
+
   async upsert(lock: MonthLock): Promise<void> {
     const { error } = await supabase.from("month_locks").upsert(
       {

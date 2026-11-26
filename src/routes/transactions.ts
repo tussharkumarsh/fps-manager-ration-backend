@@ -47,6 +47,26 @@ router.get("/", async (req, res) => {
       count: result.transactions.length,
       source: result.source,
       lockStatus: result.lockStatus,
+      unknownColumns: result.unknownColumns,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Which months of a year have been synced — drives the "Sync missing months" backfill. */
+router.get("/locks", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  const year = String(req.query.year || "");
+  if (!fpsId || !year) {
+    res.status(400).json({ error: "fpsId and year are required" });
+    return;
+  }
+  try {
+    const locks = await syncService.listLocks(fpsId, year);
+    res.json({
+      success: true,
+      locks: locks.map((l) => ({ month: l.month, status: l.status, recordCount: l.recordCount })),
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
