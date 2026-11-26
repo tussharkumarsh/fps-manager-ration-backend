@@ -1,4 +1,5 @@
-import { ScmApiClient } from "../lib/scmApiClient";
+import { ScmApiClient, fetchShopAllotment } from "../lib/scmApiClient";
+import { afsoCodeFor, AFSO_NAMES, ALLOTMENT_COMMODITIES, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts } from "../lib/scmAllotment";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
@@ -11,6 +12,59 @@ export class ScmInventoryService {
     private readonly api = new ScmApiClient();
     private readonly txnRepo = new TransactionRepository();
     private readonly lockRepo = new MonthLockRepository();
+
+    /**
+     * Pulls this shop's allotment for every known commodity × allotment type
+     * from the SCM portal, stores it as the month's received stock (replacing
+     * earlier allotment rows for the month; real truck-chit rows are kept and
+     * take precedence), then rebuilds the stock summary from this month on.
+     */
+    async syncAllotment(fpsId: string, year: string, month: string, distCode: string) {
+        const afsoCode = afsoCodeFor(fpsId);
+        const names = AFSO_NAMES[afsoCode] ?? { distName: "", afsoName: "" };
+        const jobs = ALLOTMENT_COMMODITIES.flatMap((c) => ALLOTMENT_TYPES.map((t) => ({ c, t })));
+
+        const rows: ScmInventoryTransaction[] = [];
+        const failures: string[] = [];
+        // A few requests at a time: each returns the whole mandal, and the
+        // portal is slow and occasionally errors.
+        for (let i = 0; i < jobs.length; i += 6) {
+            await Promise.all(
+                jobs.slice(i, i + 6).map(async ({ c, t }) => {
+                    try {
+                        const body = await fetchShopAllotment({
+                            distCode,
+                            distName: names.distName,
+                            afsoCode,
+                            afsoName: names.afsoName,
+                            commId: c.commId,
+                            commName: c.label,
+                            ctype: t.ctype,
+                            month,
+                            year,
+                        });
+                        const allotment = findShopAllotment(body, fpsId);
+                        if (allotment) {
+                            rows.push(...allotmentToScmTxns({ fpsId, year, month, ctype: t.ctype, commodity: c.name, unit: c.unit, allotment }));
+                        }
+                    } catch (err) {
+                        failures.push(`${c.name}/${t.name}: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                })
+            );
+        }
+
+        // Never replace a month's allotment with a partial set.
+        if (failures.length > 0) {
+            throw new Error(`SCM allotment sync incomplete (${failures.length} of ${jobs.length} requests failed): ${failures.slice(0, 3).join("; ")}`);
+        }
+
+        await this.repo.deleteAllotmentRows(fpsId, year, month);
+        await this.repo.upsertTransactions(rows);
+        await this.recomputeFrom(fpsId, year, month);
+        const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
+        return { allotmentRows: rows.length, roCount: 0, truckChitCount: 0, summary };
+    }
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
         // The SCM portal's shop number is the dealer's own fps_id, and its
@@ -150,7 +204,7 @@ export class ScmInventoryService {
         const allLocalTxns = await this.txnRepo.getAll(fpsId);
 
         for (const { year, month } of months) {
-            const scmTxns = await this.repo.getMonthTransactions(fpsId, year, month);
+            const scmTxns = preferActualReceipts(await this.repo.getMonthTransactions(fpsId, year, month));
             const localTxns = transactionsInDateMonth(allLocalTxns, year, month);
             // A month counts as ePOS-synced once it has a lock row or any sale
             // dated in it; otherwise its distribution is unknown, not zero.

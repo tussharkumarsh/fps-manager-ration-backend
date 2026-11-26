@@ -13,7 +13,11 @@ router.post("/sync", async (req, res) => {
     }
 
     try {
-        const result = await service.syncMonth(fpsId, String(year), String(month), shopNo, districtCode, districtName, batchNo);
+        if (!districtCode) {
+            res.status(400).json({ error: "districtCode is required" });
+            return;
+        }
+        const result = await service.syncAllotment(fpsId, String(year), String(month), String(districtCode));
         res.json({ success: true, ...result });
     } catch (error) {
         console.error("SCM sync failed", { error, fpsId, year, month });
