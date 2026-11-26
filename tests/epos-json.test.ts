@@ -75,3 +75,18 @@ test('parseEposJson returns no rows for an empty month', () => {
 test('parseEposJson throws when records lack a receipt id', () => {
     assert.throws(() => parseEposJson([{ foo: 1 }]), /receiptId/);
 });
+
+test('parseEposJson falls back to comm_short, then comm_id, and never drops a quantity', () => {
+    const record = {
+        ...baseRecord,
+        commodityList: [
+            { comm_name_en: null, comm_short: 'Sugar', comm_id: 4, sale_qty: 1 },
+            { comm_name_en: null, comm_short: null, comm_id: 77, sale_qty: 3 },
+            { comm_name_en: '', comm_short: '', comm_id: 0, sale_qty: 0 },
+        ],
+    };
+    const { transactions, unknownColumns } = parseEposJson([record]);
+    assert.equal(transactions[0].sugar, 1);
+    assert.deepEqual(transactions[0].extraItems, { 'comm_id 77': 3 });
+    assert.deepEqual(unknownColumns, ['comm_id 77']);
+});

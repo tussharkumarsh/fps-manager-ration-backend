@@ -13,6 +13,8 @@ import type { Transaction } from "../types";
 
 interface EposCommodity {
   comm_name_en?: string | null;
+  comm_short?: string | null;
+  comm_id?: number | null;
   sale_qty?: number | string | null;
 }
 
@@ -62,9 +64,17 @@ export function parseEposJson(body: unknown): { transactions: Transaction[]; unk
     const qty = { wheat: 0, rice: 0, sugar: 0, saree: 0, jowar: 0 };
     const extraItems: Record<string, number> = {};
     for (const c of Array.isArray(r.commodityList) ? r.commodityList : []) {
-      const name = normalizeCommodity(c?.comm_name_en || "");
-      if (!name) continue;
+      if (!c) continue;
       const amount = toNumber(c.sale_qty);
+      // The portal doesn't always fill comm_name_en (some FPS records carry
+      // the name only in comm_short). Fall back to comm_id rather than ever
+      // dropping a sold quantity.
+      const name =
+        normalizeCommodity(c.comm_name_en || c.comm_short || "") || (c.comm_id ? `comm_id ${c.comm_id}` : "");
+      if (!name) {
+        if (amount) throw new Error("ePOS response has a sold quantity with no commodity name or id");
+        continue;
+      }
       const field = txFieldForCommodity(name);
       if (field) {
         qty[field] += amount;
