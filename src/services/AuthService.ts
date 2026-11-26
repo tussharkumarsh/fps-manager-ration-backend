@@ -1,5 +1,7 @@
 import bcrypt from "bcryptjs";
 import { UserRepository } from "../repositories/UserRepository";
+import { LoginAttemptRepository } from "../repositories/LoginAttemptRepository";
+import { attemptKey, isLockedOut, LOCKOUT_WINDOW_MS } from "../lib/loginLimit";
 import type { AppUser } from "../types";
 
 export interface AuthResult {
@@ -21,13 +23,22 @@ export interface UserProfile {
 
 export class AuthService {
   private userRepo = new UserRepository();
+  private attemptRepo = new LoginAttemptRepository();
 
-  async verifyCredentials(identifier: string, password: string): Promise<AuthResult | null> {
+  /** Returns "locked" after MAX_FAILED_ATTEMPTS failures in LOCKOUT_WINDOW_MS for this identifier. */
+  async verifyCredentials(identifier: string, password: string): Promise<AuthResult | null | "locked"> {
+    const key = attemptKey(identifier);
+    const now = new Date();
+    const failures = await this.attemptRepo.recentFailures(key, new Date(now.getTime() - LOCKOUT_WINDOW_MS));
+    if (isLockedOut(failures, now)) return "locked";
+
     const user = await this.userRepo.findByFpsId(identifier.trim());
-    if (!user || !user.active) return null;
-
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return null;
+    const ok = !!user && user.active && (await bcrypt.compare(password, user.passwordHash));
+    if (!user || !ok) {
+      await this.attemptRepo.recordFailure(key);
+      return null;
+    }
+    await this.attemptRepo.clear(key);
 
     return {
       fpsId: user.fpsId,

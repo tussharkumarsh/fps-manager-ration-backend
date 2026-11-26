@@ -12,6 +12,10 @@ router.post("/verify", async (req, res) => {
       return;
     }
     const result = await authService.verifyCredentials(identifier, password);
+    if (result === "locked") {
+      res.json({ success: true, result: null, locked: true });
+      return;
+    }
     if (!result) {
       res.json({ success: true, result: null });
       return;

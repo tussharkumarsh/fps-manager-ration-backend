@@ -33,14 +33,16 @@ export class UserRepository {
   }
 
   async findByFpsId(fpsId: string): Promise<AppUser | null> {
+    // Two parameterized lookups rather than a string-built .or() filter: the
+    // identifier comes straight from the login form, and interpolating it
+    // into PostgREST filter syntax would let it inject extra conditions.
     const trimmed = fpsId.trim();
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .or(`fps_id.eq.${trimmed},username.eq.${trimmed}`)
-      .maybeSingle();
-    if (error) throw new Error(`UserRepository.findByFpsId: ${error.message}`);
-    return data ? rowToUser(data as UserRow) : null;
+    for (const column of ["fps_id", "username"] as const) {
+      const { data, error } = await supabase.from("users").select("*").eq(column, trimmed).maybeSingle();
+      if (error) throw new Error(`UserRepository.findByFpsId: ${error.message}`);
+      if (data) return rowToUser(data as UserRow);
+    }
+    return null;
   }
 
   async remove(fpsId: string): Promise<void> {

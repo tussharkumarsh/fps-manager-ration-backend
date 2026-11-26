@@ -222,3 +222,12 @@ create table if not exists manual_goshwara (
 -- Added 2026-11-26: ePOS commodity columns without a dedicated field
 -- (e.g. a new scheme item) are kept here, keyed by the report's header text.
 alter table transactions add column if not exists extra_items jsonb not null default '{}'::jsonb;
+
+-- Added 2026-11-26: failed login attempts, for the per-identifier lockout
+-- (10 failures / 15 minutes). Stored here rather than in memory so the
+-- limit holds across serverless instances. Cleared on a successful login.
+create table if not exists login_attempts (
+  identifier text not null,
+  attempted_at timestamptz not null default now()
+);
+create index if not exists login_attempts_idx on login_attempts (identifier, attempted_at);
