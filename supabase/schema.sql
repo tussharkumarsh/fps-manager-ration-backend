@@ -233,3 +233,7 @@ create table if not exists login_attempts (
 create index if not exists login_attempts_idx on login_attempts (identifier, attempted_at);
 -- RLS on with no policies: only the service_role backend can touch it.
 alter table login_attempts enable row level security;
+
+-- Added 2026-11-26: per-scheme allotment (e.g. {"PHH": 2358, "AAY": 1155})
+-- from the portal's Detailed Allotment report, alongside the total in `alloted`.
+alter table gov_stock_register add column if not exists alloted_by_scheme jsonb not null default '{}'::jsonb;

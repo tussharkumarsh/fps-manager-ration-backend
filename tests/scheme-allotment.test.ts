@@ -24,6 +24,7 @@ test('parseSchemeAllotment picks this shop and totals its allotment per canonica
         cards: 400,
         units: 1494,
         qty: { Wheat: 4700, Rice: 2963, SAREE: 0, Jowar: 0 },
+        byScheme: {},
     });
 });
 
@@ -62,4 +63,26 @@ test('parseSchemeAllotment sums the Detailed Allotment report across schemes', (
         }],
     };
     assert.deepEqual(parseSchemeAllotment(detailed, '151209500001')?.qty, { Wheat: 2343.5, Rice: 2958, Sugar: 99, Jowar: 2343.5 });
+});
+
+test('parseSchemeAllotment splits the Detailed Allotment by scheme, skipping zero schemes', () => {
+    const line = (scheme_short_name: string | null, comm_name_en: string, qty_1: number) => ({ scheme_short_name, comm_name_en, qty_1 });
+    const detailed = {
+        data: [{
+            fps_id: '151209500212',
+            c_lst: [line('AAY', 'Wheat', 1155), line('PHH', 'Wheat', 2358), line('APL', 'Wheat', 0), line('AAY', 'FRice', 5), line('AAY', 'Rice', 10)],
+        }],
+    };
+    assert.deepEqual(parseSchemeAllotment(detailed, '151209500212')?.byScheme, {
+        Wheat: { AAY: 1155, PHH: 2358 },
+        Rice: { AAY: 15 },
+    });
+    // The Scheme Wise (REG) report carries no scheme names: no split.
+    assert.deepEqual(parseSchemeAllotment({ data: [{ fps_id: '151209500212', c_lst: [line(null, 'Wheat', 3513)] }] }, '151209500212')?.byScheme, {});
+});
+
+test('withAllotment also attaches the per-scheme split', () => {
+    const e = { commodity: 'Wheat', unit: 'Kgs', alloted: 0, opening: 0, receivedRegular: 0, receivedExtra: 0, receivedMoved: 0, issued: 0, closing: 0 };
+    const [out] = withAllotment([e], { Wheat: 3513 }, { Wheat: { AAY: 1155, PHH: 2358 } });
+    assert.deepEqual([out.alloted, out.allotedByScheme], [3513, { AAY: 1155, PHH: 2358 }]);
 });

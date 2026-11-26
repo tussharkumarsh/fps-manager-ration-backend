@@ -139,11 +139,14 @@ export class InventoryService {
     // The register reports allotment as 0; take it from the scheme-wise
     // allotment report instead. Best effort — the register is what matters.
     let allotment: Record<string, number> | null = null;
+    let byScheme: Record<string, Record<string, number>> = {};
     try {
-      allotment = (await this.govApiClient.fetchSchemeAllotment(distCode, fpsId, month, year))?.qty ?? null;
+      const shop = await this.govApiClient.fetchSchemeAllotment(distCode, fpsId, month, year);
+      allotment = shop?.qty ?? null;
+      byScheme = shop?.byScheme ?? {};
     } catch (err) {
       console.error("Scheme-wise allotment fetch failed", { err, fpsId, year, month });
     }
-    return this.govStockRepo.replaceForMonth(fpsId, year, month, withAllotment(entries, allotment));
+    return this.govStockRepo.replaceForMonth(fpsId, year, month, withAllotment(entries, allotment, byScheme));
   }
 }

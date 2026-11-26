@@ -8,6 +8,7 @@ interface GovStockRow {
   commodity: string;
   unit: string;
   alloted: number;
+  alloted_by_scheme: Record<string, number> | null;
   opening: number;
   received_regular: number;
   received_extra: number;
@@ -25,6 +26,7 @@ function rowToEntry(row: GovStockRow): GovStockRegisterEntry {
     commodity: row.commodity,
     unit: row.unit,
     alloted: row.alloted,
+    allotedByScheme: row.alloted_by_scheme ?? {},
     opening: row.opening,
     receivedRegular: row.received_regular,
     receivedExtra: row.received_extra,
@@ -43,6 +45,7 @@ function entryToRow(entry: GovStockRegisterEntry): GovStockRow {
     commodity: entry.commodity,
     unit: entry.unit,
     alloted: entry.alloted,
+    alloted_by_scheme: entry.allotedByScheme ?? {},
     opening: entry.opening,
     received_regular: entry.receivedRegular,
     received_extra: entry.receivedExtra,
