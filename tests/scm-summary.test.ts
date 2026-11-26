@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildMonthSummary } from '../src/lib/scmSummary';
+import { buildMonthSummary, transactionsInDateMonth } from '../src/lib/scmSummary';
 import type { InventoryMonthlySummary, ScmInventoryTransaction, Transaction } from '../src/types';
 
 const base = { fpsId: '151209500212', year: '2026', month: '8', localDataSynced: true };
@@ -111,4 +111,13 @@ test('falls back to dispatchedQty for tracked commodities when the month has no 
     const row = findRow(rows, 'PHH', 'Rice')!;
     assert.equal(row.distributedQty, 3140);
     assert.equal(row.closingStock, 20);
+});
+
+test('transactionsInDateMonth groups by the transaction date, not the allocation month', () => {
+    const t = (date: string) => ({ ...local('PHH', { wheat: 1 }), date });
+    const txns = [t('2026-04-11 09:48'), t('2026-05-02 10:00'), t('2026-06-28 11:12'), t('2026-06-01 08:00'), t('')];
+    assert.equal(transactionsInDateMonth(txns, '2026', '4').length, 1);
+    assert.equal(transactionsInDateMonth(txns, '2026', '5').length, 1);
+    assert.equal(transactionsInDateMonth(txns, '2026', '6').length, 2);
+    assert.equal(transactionsInDateMonth(txns, '2025', '6').length, 0);
 });

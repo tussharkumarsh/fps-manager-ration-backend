@@ -95,3 +95,15 @@ export function buildMonthSummary(input: {
       };
     });
 }
+
+/**
+ * Transactions whose own date ("YYYY-MM-DD HH:mm") falls in the given
+ * calendar month. The portal files transactions under their allocation
+ * month — e.g. April 2026's three-month allotment holds sales dated April
+ * through June — while SCM receipts arrive month by month, so the stock
+ * summary has to count each sale in the month it actually happened.
+ */
+export function transactionsInDateMonth<T extends { date: string }>(txns: T[], year: string, month: string): T[] {
+  const prefix = `${year}-${String(parseInt(month, 10)).padStart(2, "0")}-`;
+  return txns.filter((t) => (t.date || "").startsWith(prefix));
+}

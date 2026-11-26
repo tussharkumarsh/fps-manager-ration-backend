@@ -2,7 +2,7 @@ import { ScmApiClient } from "../lib/scmApiClient";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
-import { buildMonthSummary } from "../lib/scmSummary";
+import { buildMonthSummary, transactionsInDateMonth } from "../lib/scmSummary";
 import { currentIstYearMonth, monthsFrom, previousMonth } from "../lib/ids";
 import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
 
@@ -144,14 +144,16 @@ export class ScmInventoryService {
 
         const before = previousMonth(year, String(Number(fromMonth)));
         let previous = await this.repo.getSummaryForMonth(fpsId, before.year, before.month);
+        // Sales are counted in the month of their own date (see
+        // transactionsInDateMonth), so one allocation month's sync can feed
+        // several calendar months — load the dealer's sales once.
+        const allLocalTxns = await this.txnRepo.getAll(fpsId);
 
         for (const { year, month } of months) {
-            const [scmTxns, localTxns] = await Promise.all([
-                this.repo.getMonthTransactions(fpsId, year, month),
-                this.txnRepo.getForMonth(fpsId, year, month),
-            ]);
-            // A month counts as ePOS-synced once it has a lock row or any stored
-            // transaction; otherwise its distribution is unknown, not zero.
+            const scmTxns = await this.repo.getMonthTransactions(fpsId, year, month);
+            const localTxns = transactionsInDateMonth(allLocalTxns, year, month);
+            // A month counts as ePOS-synced once it has a lock row or any sale
+            // dated in it; otherwise its distribution is unknown, not zero.
             const localDataSynced = localTxns.length > 0 || (await this.lockRepo.get(fpsId, year, month)) !== null;
             const summary = buildMonthSummary({ fpsId, year, month, localDataSynced, scmTxns, localTxns, previous });
             await this.repo.replaceSummaryRows(fpsId, year, month, summary);
