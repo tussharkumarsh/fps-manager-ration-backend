@@ -2,6 +2,7 @@ import { GovApiClient } from "../clients/GovApiClient";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
+import { InventoryService } from "./InventoryService";
 import { currentIstYearMonth } from "../lib/ids";
 import { compareDaily, summarizeDaily } from "../lib/dailyVerify";
 import type { MonthLock, Transaction } from "../types";
@@ -36,6 +37,7 @@ export class SyncService {
   private txnRepo = new TransactionRepository();
   private lockRepo = new MonthLockRepository();
   private scmService = new ScmInventoryService();
+  private inventoryService = new InventoryService();
 
   async getAllStoredTransactions(fpsId: string): Promise<Transaction[]> {
     return this.txnRepo.getAll(fpsId);
@@ -110,6 +112,14 @@ export class SyncService {
       await this.scmService.recomputeFrom(fpsId, year, month);
     } catch (err) {
       console.error("SCM summary recompute after transaction sync failed", { err, fpsId, year, month });
+    }
+
+    // The government stock register is what dealers see as their stock, so
+    // refresh it alongside the month's sales. Best effort, like the recompute.
+    try {
+      await this.inventoryService.syncGovStockRegister(fpsId, distCode, year, month);
+    } catch (err) {
+      console.error("Gov stock register refresh after transaction sync failed", { err, fpsId, year, month });
     }
 
     const newLock = await this.lockRepo.get(fpsId, year, month);
