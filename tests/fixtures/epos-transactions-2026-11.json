@@ -1,0 +1,21 @@
+[
+    {
+        "existingRcNumber": "272033297164",
+        "transStatus": "O",
+        "schemeShortName": "PHH",
+        "schemeId": "31",
+        "receiptId": "2564329493468023660",
+        "txnId": "NIC81313081851820261125103344198PDSMH",
+        "portCheck": "Self",
+        "amount": "0.00",
+        "transTime": "00.846",
+        "loginTime": "2026-11-25 10:34:18",
+        "auth_type": "Aadhaar OTP",
+        "commodityList": [
+            { "comm_name_en": "Wheat", "unit_type": "Kgs", "comm_id": 1, "allomtQty": 0.0, "sale_qty": 6.0, "nfsasaleQty": 0.0, "statesaleQty": 0.0 },
+            { "comm_name_en": "Rice", "unit_type": "Kgs", "comm_id": 2, "allomtQty": 0.0, "sale_qty": 8.0, "nfsasaleQty": 0.0, "statesaleQty": 0.0 },
+            { "comm_name_en": "Sugar", "unit_type": "Kgs", "comm_id": 4, "allomtQty": 0.0, "sale_qty": 0.0, "nfsasaleQty": 0.0, "statesaleQty": 0.0 },
+            { "comm_name_en": "Jowar", "unit_type": "Kgs", "comm_id": 91, "allomtQty": 0.0, "sale_qty": 6.0, "nfsasaleQty": 0.0, "statesaleQty": 0.0 }
+        ]
+    }
+]
