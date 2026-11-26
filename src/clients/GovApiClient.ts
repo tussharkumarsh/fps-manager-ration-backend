@@ -1,11 +1,11 @@
-import { parseStockRegisterHtml } from "../lib/eposParser";
+import { parseStockRegisterJson } from "../lib/stockRegisterParser";
 import { parseEposJson } from "../lib/eposJsonParser";
 import { parseDailyTotals, type DayTotals } from "../lib/dailyVerify";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
 const EPOS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/fpstransactionwitoutcatptcha";
 const DAILY_TOTALS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/dateWiseTransDetails";
-const STOCK_REGISTER_URL = "https://epos.mahafood.gov.in/fps_stock_register_comm.action";
+const STOCK_REGISTER_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/getfpsStockregister";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -98,48 +98,18 @@ export class GovApiClient {
     return parseDailyTotals(json);
   }
 
+  /** The portal's own stock register for a month (opening, received, issued, closing per commodity). */
   async fetchStockRegister(
-    distCode: string,
+    _distCode: string,
     fpsId: string,
     month: string,
-    year: string,
-    maxAttempts = 4
+    year: string
   ): Promise<Omit<GovStockRegisterEntry, "fpsId" | "year" | "month" | "fetchedAt">[]> {
-    const formBody = `dist_code=${encodeURIComponent(distCode)}&fps_id=${encodeURIComponent(
-      fpsId
-    )}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`;
-
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const response = await fetch(STOCK_REGISTER_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Mozilla/5.0",
-            Accept: "text/html",
-          },
-          body: formBody,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Stock register API returned status ${response.status}`);
-        }
-
-        const html = await response.text();
-        return parseStockRegisterHtml(html);
-      } catch (err) {
-        lastErr = err;
-        if (attempt < maxAttempts - 1) {
-          await sleep(300 * 2 ** attempt + Math.random() * 200);
-        }
-      }
-    }
-
-    throw new Error(
-      `Failed to reach stock register API after ${maxAttempts} attempts: ${
-        lastErr instanceof Error ? lastErr.message : String(lastErr)
-      }`
-    );
+    const json = await this.postEposJson(STOCK_REGISTER_URL, {
+      fps_id: fpsId,
+      month: String(parseInt(month, 10)),
+      year: String(year),
+    });
+    return parseStockRegisterJson(json, fpsId);
   }
 }
