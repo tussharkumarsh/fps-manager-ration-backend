@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseDailyTotals, summarizeDaily, compareDaily } from '../src/lib/dailyVerify';
+import { parseDailyTotals, summarizeDaily, summarizeByDate, compareDaily } from '../src/lib/dailyVerify';
 import type { Transaction } from '../src/types';
 
 // Shape of one day from the portal's Epos_Spring/fps/dateWiseTransDetails
@@ -71,4 +71,15 @@ test('compareDaily matches equal days and flags each differing field, mismatches
         ['2026-11-06', true, []],
     ]);
     assert.equal(result.days[1].gov, null);
+});
+
+test('summarizeByDate totals every day it is given, across calendar months', () => {
+    // The portal's day-wise report follows the allocation month (April 2026's
+    // allotment ran into June), so verify compares a whole allocation month.
+    const days = summarizeByDate([
+        txn('A', '2026-04-11 10:00', { wheat: 1 }),
+        txn('B', '2026-05-12 10:00', { wheat: 2 }),
+        txn('C', '2026-06-28 10:00', { wheat: 3 }),
+    ]);
+    assert.deepEqual(days.map((d) => [d.date, d.qty.Wheat]), [['2026-04-11', 1], ['2026-05-12', 2], ['2026-06-28', 3]]);
 });

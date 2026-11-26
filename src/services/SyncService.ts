@@ -4,7 +4,7 @@ import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
 import { InventoryService } from "./InventoryService";
 import { currentIstYearMonth } from "../lib/ids";
-import { compareDaily, summarizeDaily } from "../lib/dailyVerify";
+import { compareDaily, summarizeByDate } from "../lib/dailyVerify";
 import type { MonthLock, Transaction } from "../types";
 
 function isCurrentMonth(year: string, month: string): boolean {
@@ -71,11 +71,13 @@ export class SyncService {
     year: string,
     month: string
   ): Promise<ReturnType<typeof compareDaily>> {
+    // The portal's day-wise report covers an allocation month, which can run
+    // past the calendar month — compare it with that allocation month's sales.
     const [gov, stored] = await Promise.all([
       this.govApi.fetchDailyTotals(distCode, fpsId, month, year),
-      this.txnRepo.getAll(fpsId),
+      this.txnRepo.getForMonth(fpsId, year, month),
     ]);
-    return compareDaily(gov, summarizeDaily(stored, year, month));
+    return compareDaily(gov, summarizeByDate(stored));
   }
 
   async getMonthData(

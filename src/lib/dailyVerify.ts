@@ -68,8 +68,18 @@ export function parseDailyTotals(body: unknown): DayTotals[] {
 
 /** Our sales dated in the given calendar month, totalled per day. */
 export function summarizeDaily(txns: Transaction[], year: string, month: string): DayTotals[] {
+  return summarizeByDate(transactionsInDateMonth(txns, year, month));
+}
+
+/**
+ * Our sales totalled per day, for every date present. The portal's day-wise
+ * report follows the allocation month (April 2026's three-month allotment
+ * ran to late June), so verification compares a whole allocation month.
+ */
+export function summarizeByDate(txns: Transaction[]): DayTotals[] {
   const byDate = new Map<string, { cards: Set<string>; qty: Record<string, number> }>();
-  for (const t of transactionsInDateMonth(txns, year, month)) {
+  for (const t of txns) {
+    if (!t.date || t.date.length < 10) continue;
     const date = t.date.slice(0, 10);
     let day = byDate.get(date);
     if (!day) {
