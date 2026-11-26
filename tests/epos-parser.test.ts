@@ -79,3 +79,12 @@ test('parseEposReport returns no rows and no error for a month with no transacti
     const { transactions } = parseEposReport('<html><body>No Records Found</body></html>');
     assert.deepEqual(transactions, []);
 });
+
+test('parseEposReport accepts a month whose header has no Wheat or Rice column', () => {
+    const { transactions } = parseEposReport(report(['Sugar', 'Jowar'], ['1.000', '4.000']));
+    assert.equal(transactions.length, 1);
+    assert.equal(transactions[0].sugar, 1);
+    assert.equal(transactions[0].jowar, 4);
+    assert.equal(transactions[0].wheat, 0);
+    assert.equal(transactions[0].portability, 'Self');
+});

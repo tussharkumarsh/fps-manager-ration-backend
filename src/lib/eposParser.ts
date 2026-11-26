@@ -71,7 +71,11 @@ export function parseEposReport(html: string): { transactions: Transaction[]; un
     if (p !== -1) portabilityIdx = trailingStart + p;
     if (at !== -1) authTimeIdx = trailingStart + at;
 
-    hasHeaderMap = wheatIdx !== -1 && riceIdx !== -1 && amountIdx !== -1 && portabilityIdx !== -1;
+    // Shops and months carry different commodity sets (one may have no
+    // wheat or rice at all), so only require the trailing columns plus at
+    // least one commodity column we recognise.
+    const anyCommodity = [wheatIdx, riceIdx, sugarIdx, sareeIdx, jowarIdx].some((x) => x !== -1);
+    hasHeaderMap = anyCommodity && amountIdx !== -1 && portabilityIdx !== -1;
 
     const known = new Set([w, r, s, sa, j].filter((x) => x !== -1));
     subCells.forEach((c, k) => {
