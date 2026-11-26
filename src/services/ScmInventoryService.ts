@@ -1,6 +1,7 @@
 import { ScmApiClient } from "../lib/scmApiClient";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
+import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { buildMonthSummary } from "../lib/scmSummary";
 import { currentIstYearMonth, previousMonth } from "../lib/ids";
 import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
@@ -9,6 +10,7 @@ export class ScmInventoryService {
     private readonly repo = new ScmInventoryRepository();
     private readonly api = new ScmApiClient();
     private readonly txnRepo = new TransactionRepository();
+    private readonly lockRepo = new MonthLockRepository();
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
         // The SCM portal's shop number is the dealer's own fps_id, and its
@@ -150,7 +152,10 @@ export class ScmInventoryService {
                 this.repo.getMonthTransactions(fpsId, year, month),
                 this.txnRepo.getForMonth(fpsId, year, month),
             ]);
-            const summary = buildMonthSummary({ fpsId, year, month, scmTxns, localTxns, previous });
+            // A month counts as ePOS-synced once it has a lock row or any stored
+            // transaction; otherwise its distribution is unknown, not zero.
+            const localDataSynced = localTxns.length > 0 || (await this.lockRepo.get(fpsId, year, month)) !== null;
+            const summary = buildMonthSummary({ fpsId, year, month, localDataSynced, scmTxns, localTxns, previous });
             await this.repo.replaceSummaryRows(fpsId, year, month, summary);
             previous = summary;
         }

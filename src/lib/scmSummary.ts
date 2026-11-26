@@ -8,7 +8,11 @@ const TX_FIELDS: TxField[] = ["wheat", "rice", "sugar", "saree", "jowar"];
  *   opening     = previous month's closing (0 when there is none)
  *   received    = SCM truck-chit received qty
  *   distributed = our own recorded sales for commodities the ePOS ledger
- *                 tracks; the SCM dispatch figure for anything else
+ *                 tracks; the SCM dispatch figure for anything else — and
+ *                 for every commodity in a month whose ePOS data was never
+ *                 synced (localDataSynced=false), since counting that
+ *                 month as "nothing distributed" would carry its whole
+ *                 receipt into every later month's opening
  *   closing     = opening + received − distributed
  * Commodity names are normalized so a portal rename (FRice → Rice) doesn't
  * break the carry-forward chain.
@@ -17,6 +21,8 @@ export function buildMonthSummary(input: {
   fpsId: string;
   year: string;
   month: string;
+  /** Whether this month's ePOS transactions have been synced at all. */
+  localDataSynced: boolean;
   scmTxns: ScmInventoryTransaction[];
   localTxns: Transaction[];
   previous: InventoryMonthlySummary[];
@@ -72,7 +78,8 @@ export function buildMonthSummary(input: {
       const g = groups.get(key)!;
       const [scheme, commodity] = key.split("|");
       const opening = openingByKey.get(key) || 0;
-      const distributed = txFieldForCommodity(commodity) ? localByKey.get(key) || 0 : g.dispatched;
+      const useLocal = input.localDataSynced && txFieldForCommodity(commodity) !== null;
+      const distributed = useLocal ? localByKey.get(key) || 0 : g.dispatched;
       return {
         fpsId,
         year,

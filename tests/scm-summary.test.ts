@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { buildMonthSummary } from '../src/lib/scmSummary';
 import type { InventoryMonthlySummary, ScmInventoryTransaction, Transaction } from '../src/types';
 
-const base = { fpsId: '151209500212', year: '2026', month: '8' };
+const base = { fpsId: '151209500212', year: '2026', month: '8', localDataSynced: true };
 
 function scm(scheme: string, commodity: string, receivedQty: number, dispatchedQty = receivedQty): ScmInventoryTransaction {
     return {
@@ -28,7 +28,7 @@ function prev(scheme: string, commodity: string, closingStock: number): Inventor
     };
 }
 
-const find = (rows: InventoryMonthlySummary[], scheme: string, commodity: string) =>
+const findRow = (rows: InventoryMonthlySummary[], scheme: string, commodity: string) =>
     rows.find((r) => r.scheme === scheme && r.commodity === commodity);
 
 test('carries previous closing into opening', () => {
@@ -38,7 +38,7 @@ test('carries previous closing into opening', () => {
         localTxns: [local('PHH', { rice: 3162 })],
         previous: [prev('PHH', 'Rice', -74)],
     });
-    const row = find(rows, 'PHH', 'Rice')!;
+    const row = findRow(rows, 'PHH', 'Rice')!;
     assert.equal(row.openingStock, -74);
     assert.equal(row.receivedQty, 3066);
     assert.equal(row.distributedQty, 3162);
@@ -53,7 +53,7 @@ test('continues the chain across the FRice→Rice rename', () => {
         previous: [prev('PHH', 'FRice', 10)],
     });
     assert.equal(rows.length, 1);
-    const row = find(rows, 'PHH', 'Rice')!;
+    const row = findRow(rows, 'PHH', 'Rice')!;
     assert.equal(row.openingStock, 10);
     assert.equal(row.closingStock, 15);
 });
@@ -65,7 +65,7 @@ test('keeps a carried row with no receipts this month', () => {
         localTxns: [local('AAY', { saree: 10 })],
         previous: [prev('AAY', 'SAREE', 80)],
     });
-    const row = find(rows, 'AAY', 'SAREE')!;
+    const row = findRow(rows, 'AAY', 'SAREE')!;
     assert.deepEqual(
         [row.openingStock, row.receivedQty, row.distributedQty, row.closingStock],
         [80, 0, 10, 70]
@@ -79,7 +79,7 @@ test('uses dispatchedQty for commodities without a local field', () => {
         localTxns: [],
         previous: [],
     });
-    const row = find(rows, 'PHH', 'Bajra')!;
+    const row = findRow(rows, 'PHH', 'Bajra')!;
     assert.equal(row.distributedQty, 50);
     assert.equal(row.closingStock, 10);
 });
@@ -91,11 +91,24 @@ test('adds a row for local distribution with no receipts and no previous stock',
         localTxns: [local('AAY', { sugar: 35 })],
         previous: [],
     });
-    const row = find(rows, 'AAY', 'Sugar')!;
+    const row = findRow(rows, 'AAY', 'Sugar')!;
     assert.equal(row.closingStock, -35);
 });
 
 test('drops previous rows that closed at zero and have no activity', () => {
     const rows = buildMonthSummary({ ...base, scmTxns: [], localTxns: [], previous: [prev('PHH', 'Wheat', 0)] });
     assert.deepEqual(rows, []);
+});
+
+test('falls back to dispatchedQty for tracked commodities when the month has no synced ePOS data', () => {
+    const rows = buildMonthSummary({
+        ...base,
+        localDataSynced: false,
+        scmTxns: [scm('PHH', 'FRice', 3140, 3140)],
+        localTxns: [],
+        previous: [prev('PHH', 'Rice', 20)],
+    });
+    const row = findRow(rows, 'PHH', 'Rice')!;
+    assert.equal(row.distributedQty, 3140);
+    assert.equal(row.closingStock, 20);
 });
