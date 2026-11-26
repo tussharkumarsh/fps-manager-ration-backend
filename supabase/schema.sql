@@ -218,3 +218,7 @@ create table if not exists manual_goshwara (
   updated_at timestamptz not null default now(),
   primary key (fps_id, year, month)
 );
+
+-- Added 2026-11-26: ePOS commodity columns without a dedicated field
+-- (e.g. a new scheme item) are kept here, keyed by the report's header text.
+alter table transactions add column if not exists extra_items jsonb not null default '{}'::jsonb;

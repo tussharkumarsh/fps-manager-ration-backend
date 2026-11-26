@@ -17,6 +17,17 @@ function labelIndex(cells: { text: string }[], label: string): number {
 }
 
 export function parseEposHtml(html: string): Transaction[] {
+  return parseEposReport(html).transactions;
+}
+
+/**
+ * Commodity columns are mapped from the report's own header. A commodity
+ * column we don't have a dedicated field for is kept per-row in
+ * `extraItems` (and its header returned in `unknownColumns`) rather than
+ * dropped. If data rows exist but the header can't be mapped, this throws:
+ * guessing column positions silently mis-assigns quantities.
+ */
+export function parseEposReport(html: string): { transactions: Transaction[]; unknownColumns: string[] } {
   const $ = cheerio.load(html);
   const transactions: Transaction[] = [];
 
@@ -24,6 +35,7 @@ export function parseEposHtml(html: string): Transaction[] {
   let wheatIdx = -1, riceIdx = -1, sugarIdx = -1, sareeIdx = -1, jowarIdx = -1;
   let amountIdx = -1, portabilityIdx = -1, authTimeIdx = -1;
   let hasHeaderMap = false;
+  const extraColumns: { idx: number; label: string }[] = [];
 
   const theadRows = $("#Report thead tr").toArray();
   if (theadRows.length >= 2) {
@@ -60,6 +72,11 @@ export function parseEposHtml(html: string): Transaction[] {
     if (at !== -1) authTimeIdx = trailingStart + at;
 
     hasHeaderMap = wheatIdx !== -1 && riceIdx !== -1 && amountIdx !== -1 && portabilityIdx !== -1;
+
+    const known = new Set([w, r, s, sa, j].filter((x) => x !== -1));
+    subCells.forEach((c, k) => {
+      if (!known.has(k) && c.text) extraColumns.push({ idx: LEADING + k, label: c.text });
+    });
   }
 
   let i = 0;
@@ -69,22 +86,25 @@ export function parseEposHtml(html: string): Transaction[] {
     const slNo = parseInt($(cells[0]).text().trim(), 10);
     if (!Number.isFinite(slNo)) return;
 
+    if (!hasHeaderMap) {
+      throw new Error("ePOS report header not recognised — commodity columns could not be mapped");
+    }
+
     const cellText = (idx: number) => (idx === -1 ? "" : $(cells[idx]).text().trim());
     const cellNum = (idx: number) => (idx === -1 ? 0 : parseFloat($(cells[idx]).text().trim()) || 0);
 
     const receiptNo = $(cells[4]).text().trim();
 
-    // Fallback to the observed default layout (Wheat, Rice, Sugar, Jowar,
-    // Amount, Portability, Auth Trans Time at cells 6-12, no Saree column)
-    // if the two-row header couldn't be parsed.
-    const wheat = hasHeaderMap ? cellNum(wheatIdx) : parseFloat($(cells[6]).text().trim()) || 0;
-    const rice = hasHeaderMap ? cellNum(riceIdx) : parseFloat($(cells[7]).text().trim()) || 0;
-    const sugar = hasHeaderMap ? cellNum(sugarIdx) : parseFloat($(cells[8]).text().trim()) || 0;
-    const saree = hasHeaderMap ? cellNum(sareeIdx) : 0;
-    const jowar = hasHeaderMap ? cellNum(jowarIdx) : parseFloat($(cells[9]).text().trim()) || 0;
-    const amount = hasHeaderMap ? cellNum(amountIdx) : parseFloat($(cells[10]).text().trim()) || 0;
-    const portability = hasHeaderMap ? cellText(portabilityIdx) : $(cells[11]).text().trim();
-    const authTransTime = hasHeaderMap ? cellText(authTimeIdx) || undefined : cellText(12) || undefined;
+    const wheat = cellNum(wheatIdx);
+    const rice = cellNum(riceIdx);
+    const sugar = cellNum(sugarIdx);
+    const saree = cellNum(sareeIdx);
+    const jowar = cellNum(jowarIdx);
+    const amount = cellNum(amountIdx);
+    const portability = cellText(portabilityIdx);
+    const authTransTime = cellText(authTimeIdx) || undefined;
+    const extraItems: Record<string, number> = {};
+    for (const col of extraColumns) extraItems[col.label] = cellNum(col.idx);
 
     transactions.push({
       id: receiptNo,
@@ -102,11 +122,12 @@ export function parseEposHtml(html: string): Transaction[] {
       amount,
       portability,
       authTransTime,
+      extraItems,
     });
     i++;
   });
 
-  return transactions;
+  return { transactions, unknownColumns: extraColumns.map((c) => c.label) };
 }
 
 const num = (text: string) => parseFloat(text.trim()) || 0;

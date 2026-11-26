@@ -21,6 +21,7 @@ interface TransactionRow {
   amount: number;
   portability: string;
   auth_trans_time: string | null;
+  extra_items: Record<string, number> | null;
   fetched_at: string;
   source: string;
 }
@@ -45,6 +46,7 @@ function rowToTxn(row: TransactionRow): StoredTransaction {
     amount: row.amount,
     portability: row.portability,
     authTransTime: row.auth_trans_time || undefined,
+    extraItems: row.extra_items || {},
     fetchedAt: row.fetched_at,
     source: (row.source as StoredTransaction["source"]) || "api",
   };
@@ -77,6 +79,7 @@ function txnToRow(
     amount: t.amount,
     portability: t.portability,
     auth_trans_time: t.authTransTime || null,
+    extra_items: t.extraItems || {},
     fetched_at: fetchedAt,
     source,
   };

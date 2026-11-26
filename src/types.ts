@@ -46,6 +46,8 @@ export interface Transaction {
   amount: number;
   portability: string;
   authTransTime?: string;
+  /** Quantities from ePOS commodity columns without a dedicated field, keyed by header text. */
+  extraItems?: Record<string, number>;
   customerName?: string;
   monthDate?: string;
 }

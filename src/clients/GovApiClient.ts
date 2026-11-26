@@ -1,4 +1,4 @@
-import { parseEposHtml, parseStockRegisterHtml } from "../lib/eposParser";
+import { parseEposReport, parseStockRegisterHtml } from "../lib/eposParser";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
 const EPOS_URL = "https://epos.mahafood.gov.in/FPS_Trans_Details.jsp";
@@ -20,13 +20,14 @@ export class GovApiClient {
     month: string,
     year: string,
     maxAttempts = 4
-  ): Promise<{ transactions: Transaction[] }> {
+  ): Promise<{ transactions: Transaction[]; unknownColumns: string[] }> {
     const formBody = `dist_code=${encodeURIComponent(distCode)}&fps_id=${encodeURIComponent(
       fpsId
     )}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`;
 
     let lastErr: unknown;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let html: string;
       try {
         const response = await fetch(EPOS_URL, {
           method: "POST",
@@ -42,14 +43,17 @@ export class GovApiClient {
           throw new Error(`ePOS API returned status ${response.status}`);
         }
 
-        const html = await response.text();
-        return { transactions: parseEposHtml(html) };
+        html = await response.text();
       } catch (err) {
         lastErr = err;
         if (attempt < maxAttempts - 1) {
           await sleep(300 * 2 ** attempt + Math.random() * 200);
         }
+        continue;
       }
+      // Outside the retry: a page we can't parse won't parse on a retry, and
+      // its error shouldn't be reported as a connectivity failure.
+      return parseEposReport(html);
     }
 
     throw new Error(
