@@ -40,6 +40,9 @@ export function afsoCodeFor(fpsId: string): string {
 
 export function findShopAllotment(body: unknown, fpsId: string): SchemeAllotment | null {
   const b = (body ?? {}) as { rep_code?: unknown; rep_message?: unknown; data?: unknown };
+  // The portal answers "No data found" when a type (e.g. ADVANCE) has no
+  // allotment that month — that's zero, not a failure.
+  if (/no\s+data\s+found/i.test(String(b.rep_message ?? ""))) return null;
   if (b.rep_code !== undefined && String(b.rep_code) !== "200") {
     throw new Error(`SCM allotment API: ${String(b.rep_message || `code ${b.rep_code}`)}`);
   }

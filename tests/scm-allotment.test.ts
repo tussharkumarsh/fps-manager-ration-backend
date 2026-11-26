@@ -61,3 +61,8 @@ test('preferActualReceipts ignores allotment rows when the month has real truck-
     assert.deepEqual(preferActualReceipts([row('TC-REG-1'), row('ALLOT-1')]).map((r) => r.truckChitNo), ['TC-REG-1']);
     assert.deepEqual(preferActualReceipts([row('ALLOT-1'), row('ALLOT-3')]).map((r) => r.truckChitNo), ['ALLOT-1', 'ALLOT-3']);
 });
+
+test('findShopAllotment treats "No data found" as no allotment, not an error', () => {
+    assert.equal(findShopAllotment({ rep_code: '204', rep_message: 'No data found' }, '151209500212'), null);
+    assert.equal(findShopAllotment({ rep_code: '500', rep_message: 'No Data Found.' }, '151209500212'), null);
+});

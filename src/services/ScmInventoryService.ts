@@ -56,7 +56,7 @@ export class ScmInventoryService {
 
         // Never replace a month's allotment with a partial set.
         if (failures.length > 0) {
-            throw new Error(`SCM allotment sync incomplete (${failures.length} of ${jobs.length} requests failed): ${failures.slice(0, 3).join("; ")}`);
+            throw new Error(`SCM allotment sync incomplete (${failures.length} of ${jobs.length} requests failed): ${failures.join("; ")}`);
         }
 
         await this.repo.deleteAllotmentRows(fpsId, year, month);
