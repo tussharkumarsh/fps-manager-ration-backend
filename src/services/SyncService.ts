@@ -3,6 +3,7 @@ import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
 import { currentIstYearMonth } from "../lib/ids";
+import { compareDaily, summarizeDaily } from "../lib/dailyVerify";
 import type { MonthLock, Transaction } from "../types";
 
 function isCurrentMonth(year: string, month: string): boolean {
@@ -56,6 +57,23 @@ export class SyncService {
       this.txnRepo.countsForYear(fpsId, year),
     ]);
     return locks.map((l) => ({ ...l, storedCount: counts.get(String(parseInt(l.month, 10))) || 0 }));
+  }
+
+  /**
+   * Compares our stored sales, totalled per calendar day of the month, with
+   * the portal's own day-wise totals. Read-only; always a live portal call.
+   */
+  async verifyMonth(
+    distCode: string,
+    fpsId: string,
+    year: string,
+    month: string
+  ): Promise<ReturnType<typeof compareDaily>> {
+    const [gov, stored] = await Promise.all([
+      this.govApi.fetchDailyTotals(distCode, fpsId, month, year),
+      this.txnRepo.getAll(fpsId),
+    ]);
+    return compareDaily(gov, summarizeDaily(stored, year, month));
   }
 
   async getMonthData(

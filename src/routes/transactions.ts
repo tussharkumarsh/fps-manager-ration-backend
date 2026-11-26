@@ -54,6 +54,24 @@ router.get("/", async (req, res) => {
   }
 });
 
+/** Day-by-day comparison of stored sales against the portal's own daily totals (live portal call). */
+router.get("/verify", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  const distCode = String(req.query.distCode || "");
+  const year = String(req.query.year || "");
+  const month = String(req.query.month || "");
+  if (!fpsId || !distCode || !year || !month) {
+    res.status(400).json({ error: "fpsId, distCode, year and month are required" });
+    return;
+  }
+  try {
+    const result = await syncService.verifyMonth(distCode, fpsId, year, month);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 /** Which months of a year have been synced — drives the "Sync missing months" backfill. */
 router.get("/locks", async (req, res) => {
   const fpsId = String(req.query.fpsId || "");
