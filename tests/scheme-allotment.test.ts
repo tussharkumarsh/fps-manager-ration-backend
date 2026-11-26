@@ -45,3 +45,21 @@ test('withAllotment fills the register allotment by commodity and leaves others 
     assert.deepEqual(out.map((x) => [x.commodity, x.alloted]), [['Wheat', 4700], ['Wheat-PMGKAY', 7], ['Rice', 2963]]);
     assert.deepEqual(withAllotment([e('Wheat', 3)], null).map((x) => x.alloted), [3]);
 });
+
+test('parseSchemeAllotment sums the Detailed Allotment report across schemes', () => {
+    // Shape of Epos_Spring/SchemeAllotmentAll/get_Scheme_Allot_All_FPS (shop
+    // 151209500001, Nov 2026): one c_lst line per scheme x commodity.
+    const line = (scheme_short_name: string, comm_name_en: string, qty_1: number) => ({ scheme_short_name, comm_name_en, qty_1 });
+    const detailed = {
+        rep_code: '200',
+        data: [{
+            fps_id: '151209500001', total_cards: 0, total_units: 0,
+            c_lst: [
+                line('AAY', 'Wheat', 1100), line('AAY', 'Rice', 1300), line('AAY', 'Sugar', 99), line('AAY', 'Jowar', 1100),
+                line('APL', 'Wheat', 0), line('NPH', 'Rice', 0),
+                line('PHH', 'Wheat', 1243.5), line('PHH', 'Rice', 1658), line('PHH', 'Sugar', 0), line('PHH', 'Jowar', 1243.5),
+            ],
+        }],
+    };
+    assert.deepEqual(parseSchemeAllotment(detailed, '151209500001')?.qty, { Wheat: 2343.5, Rice: 2958, Sugar: 99, Jowar: 2343.5 });
+});
