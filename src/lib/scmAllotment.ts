@@ -26,12 +26,20 @@ export const ALLOTMENT_TYPES: readonly { ctype: string; name: string; optional?:
   { ctype: "6", name: "EXTRA PERCENTAGE", optional: true },
 ];
 
-/** comm_id values from the portal's Commodity dropdown. Add SAREE/FRice/Maize/Ragi once their ids are known. */
+/**
+ * comm_id values from the portal's Commodity dropdown. `name` is kept as the
+ * portal gives it (FRice stays FRice so its rows don't collide with Rice's);
+ * the stock summary normalizes names when grouping.
+ */
 export const ALLOTMENT_COMMODITIES = [
   { commId: "1", name: "Wheat", label: "Wheat (Kgs)", unit: "Kgs" },
   { commId: "2", name: "Rice", label: "Rice (Kgs)", unit: "Kgs" },
   { commId: "4", name: "Sugar", label: "Sugar (Kgs)", unit: "Kgs" },
+  { commId: "10", name: "SAREE", label: "SAREE (PKTS)", unit: "PKTS" },
+  { commId: "90", name: "Maize", label: "Maize (Kgs)", unit: "Kgs" },
   { commId: "91", name: "Jowar", label: "Jowar (Kgs)", unit: "Kgs" },
+  { commId: "93", name: "Ragi", label: "Ragi (Kgs)", unit: "Kgs" },
+  { commId: "98", name: "FRice", label: "FRice (Kgs)", unit: "Kgs" },
 ] as const;
 
 export const ALLOTMENT_PREFIX = "ALLOT-";

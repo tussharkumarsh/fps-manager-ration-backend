@@ -29,9 +29,9 @@ export class ScmInventoryService {
         const warnings: string[] = [];
         // A few requests at a time: each returns the whole mandal, and the
         // portal is slow and occasionally errors.
-        for (let i = 0; i < jobs.length; i += 6) {
+        for (let i = 0; i < jobs.length; i += 12) {
             await Promise.all(
-                jobs.slice(i, i + 6).map(async ({ c, t }) => {
+                jobs.slice(i, i + 12).map(async ({ c, t }) => {
                     try {
                         const body = await fetchShopAllotment({
                             distCode,

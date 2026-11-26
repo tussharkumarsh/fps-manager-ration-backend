@@ -1,10 +1,12 @@
 import { parseStockRegisterJson } from "../lib/stockRegisterParser";
+import { parseSchemeAllotment, type ShopSchemeAllotment } from "../lib/schemeAllotment";
 import { parseEposJson } from "../lib/eposJsonParser";
 import { parseDailyTotals, type DayTotals } from "../lib/dailyVerify";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
 const EPOS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/fpstransactionwitoutcatptcha";
 const DAILY_TOTALS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/dateWiseTransDetails";
+const SCHEME_ALLOTMENT_URL = "https://epos.mahafood.gov.in/Epos_Spring/SchemeAllotment/get_Scheme_Allot_FPS";
 const STOCK_REGISTER_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/getfpsStockregister";
 
 function sleep(ms: number) {
@@ -111,5 +113,24 @@ export class GovApiClient {
       year: String(year),
     });
     return parseStockRegisterJson(json, fpsId);
+  }
+
+  /** This shop's allotment for a month from the portal's "Scheme Wise Allotment" report (type REG = regular). */
+  async fetchSchemeAllotment(
+    distCode: string,
+    fpsId: string,
+    month: string,
+    year: string,
+    type = "REG"
+  ): Promise<ShopSchemeAllotment | null> {
+    const json = await this.postEposJson(SCHEME_ALLOTMENT_URL, {
+      month: String(parseInt(month, 10)),
+      year: String(year),
+      scheme_id: "0",
+      type,
+      dist_code: distCode,
+      afso_code: fpsId.trim().slice(0, 7),
+    });
+    return parseSchemeAllotment(json, fpsId);
   }
 }

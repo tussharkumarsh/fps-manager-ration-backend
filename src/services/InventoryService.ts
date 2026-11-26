@@ -2,6 +2,7 @@ import { InventoryRepository } from "../repositories/InventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { GovStockRepository } from "../repositories/GovStockRepository";
 import { GovApiClient } from "../clients/GovApiClient";
+import { withAllotment } from "../lib/schemeAllotment";
 import type { InventoryItem, InventoryLedgerEntry, GovStockRegisterEntry } from "../types";
 
 export class InventoryService {
@@ -135,6 +136,14 @@ export class InventoryService {
     month: string
   ): Promise<GovStockRegisterEntry[]> {
     const entries = await this.govApiClient.fetchStockRegister(distCode, fpsId, month, year);
-    return this.govStockRepo.replaceForMonth(fpsId, year, month, entries);
+    // The register reports allotment as 0; take it from the scheme-wise
+    // allotment report instead. Best effort — the register is what matters.
+    let allotment: Record<string, number> | null = null;
+    try {
+      allotment = (await this.govApiClient.fetchSchemeAllotment(distCode, fpsId, month, year))?.qty ?? null;
+    } catch (err) {
+      console.error("Scheme-wise allotment fetch failed", { err, fpsId, year, month });
+    }
+    return this.govStockRepo.replaceForMonth(fpsId, year, month, withAllotment(entries, allotment));
   }
 }
