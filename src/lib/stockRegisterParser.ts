@@ -16,7 +16,20 @@ function num(value: unknown): number {
  * normalize to the same commodity are summed so each commodity appears once.
  */
 export function parseStockRegisterJson(body: unknown, fpsId: string): Entry[] {
-  const list = Array.isArray(body) ? (body as Record<string, unknown>[]) : [];
+  // The register comes as a bare array (empty for months with no register,
+  // e.g. May/June 2026). Anything else is an error reply or a format change —
+  // it must not be read as "no stock", or the stored register would be wiped.
+  let list: Record<string, unknown>[];
+  if (Array.isArray(body)) {
+    list = body as Record<string, unknown>[];
+  } else if (body && typeof body === "object" && Array.isArray((body as { data?: unknown }).data)) {
+    list = (body as { data: Record<string, unknown>[] }).data;
+  } else {
+    const b = (body ?? {}) as { rep_message?: unknown; rep_code?: unknown };
+    throw new Error(
+      `Unexpected stock register response: ${String(b.rep_message ?? b.rep_code ?? JSON.stringify(body)).slice(0, 120)}`
+    );
+  }
   const byCommodity = new Map<string, Entry>();
   for (const r of list) {
     if (!r || String(r.fpsId ?? fpsId).trim() !== fpsId.trim()) continue;

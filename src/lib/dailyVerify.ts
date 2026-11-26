@@ -57,7 +57,10 @@ export function parseDailyTotals(body: unknown): DayTotals[] {
       const qty: Record<string, number> = {};
       const list = Array.isArray(day.commoditylist) ? (day.commoditylist as Record<string, unknown>[]) : [];
       for (const c of list) {
-        const name = normalizeCommodity(String(c.comm_short ?? c.comm_name_en ?? ""));
+        // Same order as the transaction parser (eposJsonParser), so both sides
+        // name a commodity the same way.
+        const name =
+          normalizeCommodity(String(c.comm_name_en || c.comm_short || "")) || (c.comm_id ? `comm_id ${c.comm_id}` : "");
         if (!name) continue;
         qty[name] = (qty[name] || 0) + toNumber(c.sale_qty);
       }

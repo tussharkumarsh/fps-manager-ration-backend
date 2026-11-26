@@ -56,8 +56,9 @@ test('parseEposJson keeps unknown commodities in extraItems and normalizes known
     const t = transactions[0];
     assert.equal(t.rice, 5);
     assert.equal(t.saree, 1);
-    assert.deepEqual(t.extraItems, { Bajra: 2, 'Toor Dal': 0 });
-    assert.deepEqual(unknownColumns, ['Bajra', 'Toor Dal']);
+    // Toor Dal sold 0 here: not a new column, not stored.
+    assert.deepEqual(t.extraItems, { Bajra: 2 });
+    assert.deepEqual(unknownColumns, ['Bajra']);
 });
 
 test('parseEposJson maps auth types to OTP / IRIS / Authenticated', () => {

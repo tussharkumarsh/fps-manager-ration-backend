@@ -113,16 +113,24 @@ export class ScmInventoryRepository {
         return payload.length;
     }
 
-    /** Removes a month's allotment-derived rows (truck_chit_no "ALLOT-*") before they're re-fetched. */
-    async deleteAllotmentRows(fpsId: string, year: string, month: string): Promise<void> {
-        const { error } = await supabase
+    /**
+     * Removes a month's allotment rows (truck_chit_no "ALLOT-<ctype>") for the
+     * given types, except those just written (keepIds).
+     */
+    async deleteStaleAllotmentRows(fpsId: string, year: string, month: string, ctypes: string[], keepIds: string[]): Promise<void> {
+        if (ctypes.length === 0) return;
+        let q = supabase
             .from("scm_inventory_transactions")
             .delete()
             .eq("fps_id", fpsId.trim())
             .eq("year", String(year).trim())
             .eq("month", String(month).trim())
-            .like("truck_chit_no", "ALLOT-%");
-        if (error) throw new Error(`ScmInventoryRepository.deleteAllotmentRows: ${error.message}`);
+            .in("truck_chit_no", ctypes.map((c) => `ALLOT-${c}`));
+        if (keepIds.length > 0) {
+            q = q.not("source_identifier", "in", `(${keepIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")})`);
+        }
+        const { error } = await q;
+        if (error) throw new Error(`ScmInventoryRepository.deleteStaleAllotmentRows: ${error.message}`);
     }
 
     async getSummaryForMonth(fpsId: string, year: string, month: string): Promise<InventoryMonthlySummary[]> {

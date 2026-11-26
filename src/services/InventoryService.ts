@@ -2,7 +2,7 @@ import { InventoryRepository } from "../repositories/InventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { GovStockRepository } from "../repositories/GovStockRepository";
 import { GovApiClient } from "../clients/GovApiClient";
-import { withAllotment } from "../lib/schemeAllotment";
+import { carryOverAllotment, withAllotment } from "../lib/schemeAllotment";
 import type { InventoryItem, InventoryLedgerEntry, GovStockRegisterEntry } from "../types";
 
 export class InventoryService {
@@ -136,8 +136,13 @@ export class InventoryService {
     month: string
   ): Promise<GovStockRegisterEntry[]> {
     const entries = await this.govApiClient.fetchStockRegister(distCode, fpsId, month, year);
-    // The register reports allotment as 0; take it from the scheme-wise
-    // allotment report instead. Best effort — the register is what matters.
+    const stored = await this.govStockRepo.getForMonth(fpsId, year, month);
+    // An empty register (a month folded into another allocation, or a portal
+    // hiccup) must never wipe what's already stored.
+    if (entries.length === 0) return stored;
+
+    // The register reports allotment as 0; take it from the allotment report
+    // instead. Best effort — if it can't be fetched, keep the stored figures.
     let allotment: Record<string, number> | null = null;
     let byScheme: Record<string, Record<string, number>> = {};
     try {
@@ -147,6 +152,7 @@ export class InventoryService {
     } catch (err) {
       console.error("Scheme-wise allotment fetch failed", { err, fpsId, year, month });
     }
-    return this.govStockRepo.replaceForMonth(fpsId, year, month, withAllotment(entries, allotment, byScheme));
+    const withAllot = allotment ? withAllotment(entries, allotment, byScheme) : carryOverAllotment(entries, stored);
+    return this.govStockRepo.replaceForMonth(fpsId, year, month, withAllot);
   }
 }

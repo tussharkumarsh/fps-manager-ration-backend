@@ -42,3 +42,20 @@ export function previousMonth(year: string, month: string): { year: string; mont
   if (m <= 1) return { year: String(y - 1), month: "12" };
   return { year: String(y), month: String(m - 1) };
 }
+
+/**
+ * Resolves with the work's result, or with undefined once `ms` has passed —
+ * for best-effort steps that must not push a request past the serverless
+ * time limit. The work itself isn't cancelled; its outcome is just not waited on.
+ */
+export async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), Math.max(0, ms));
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

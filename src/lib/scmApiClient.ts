@@ -122,6 +122,7 @@ export async function fetchShopAllotment(q: ShopAllotmentQuery, maxAttempts = 3)
                     Referer: "https://scm.mahafood.gov.in/scm/KeyRegisterAllotInt",
                 },
                 body,
+                signal: AbortSignal.timeout(20_000),
             });
             if (!res.ok) throw new Error(`SCM allotment API returned ${res.status}`);
             const text = await res.text();

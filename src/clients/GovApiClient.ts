@@ -4,6 +4,9 @@ import { parseEposJson } from "../lib/eposJsonParser";
 import { parseDailyTotals, type DayTotals } from "../lib/dailyVerify";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
+/** Per-attempt limit for a portal request: 4 attempts + backoff stay inside the 60s serverless limit. */
+const PORTAL_TIMEOUT_MS = 12_000;
+
 const EPOS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/fpstransactionwitoutcatptcha";
 const DAILY_TOTALS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/dateWiseTransDetails";
 const SCHEME_ALLOTMENT_ALL_URL = "https://epos.mahafood.gov.in/Epos_Spring/SchemeAllotmentAll/get_Scheme_Allot_All_FPS";
@@ -42,6 +45,8 @@ export class GovApiClient {
             Referer: "https://epos.mahafood.gov.in/",
           },
           body,
+          // A hung portal connection must not eat the whole serverless time limit.
+          signal: AbortSignal.timeout(PORTAL_TIMEOUT_MS),
         });
         if (!response.ok) {
           throw new Error(`ePOS API returned status ${response.status}`);

@@ -39,5 +39,6 @@ test('parseStockRegisterJson normalizes commodity names and keeps only this FPS'
 
 test('parseStockRegisterJson returns nothing for an empty month', () => {
     assert.deepEqual(parseStockRegisterJson([], '151209500212'), []);
-    assert.deepEqual(parseStockRegisterJson(null, '151209500212'), []);
+    // A null body is not an empty month (that comes as []): it must not wipe stored data.
+    assert.throws(() => parseStockRegisterJson(null, '151209500212'));
 });

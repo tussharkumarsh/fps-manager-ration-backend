@@ -1,5 +1,5 @@
 import { ScmApiClient, fetchShopAllotment } from "../lib/scmApiClient";
-import { afsoCodeFor, AFSO_NAMES, ALLOTMENT_COMMODITIES, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts } from "../lib/scmAllotment";
+import { afsoCodeFor, AFSO_NAMES, ALLOTMENT_COMMODITIES, ALLOTMENT_PREFIX, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts, replaceableCtypes } from "../lib/scmAllotment";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
@@ -27,6 +27,7 @@ export class ScmInventoryService {
         const rows: ScmInventoryTransaction[] = [];
         const failures: string[] = [];
         const warnings: string[] = [];
+        const failedCtypes = new Set<string>();
         // A few requests at a time: each returns the whole mandal, and the
         // portal is slow and occasionally errors.
         for (let i = 0; i < jobs.length; i += 12) {
@@ -51,6 +52,7 @@ export class ScmInventoryService {
                     } catch (err) {
                         const msg = `${c.name}/${t.name}: ${err instanceof Error ? err.message : String(err)}`;
                         (t.optional ? warnings : failures).push(msg);
+                        failedCtypes.add(t.ctype);
                     }
                 })
             );
@@ -61,11 +63,17 @@ export class ScmInventoryService {
             throw new Error(`SCM allotment sync incomplete (${failures.length} of ${jobs.length} requests failed): ${failures.join("; ")}`);
         }
 
-        await this.repo.deleteAllotmentRows(fpsId, year, month);
-        await this.repo.upsertTransactions(rows);
+        // Only types fetched completely are replaced; an optional type that
+        // failed this time keeps the rows an earlier sync stored. New rows go
+        // in first and only then are stale ones removed, so the month is never
+        // left without allotment rows midway.
+        const ctypes = replaceableCtypes(ALLOTMENT_TYPES.map((t) => t.ctype), failedCtypes);
+        const keep = rows.filter((r) => ctypes.includes(r.truckChitNo.slice(ALLOTMENT_PREFIX.length)));
+        await this.repo.upsertTransactions(keep);
+        await this.repo.deleteStaleAllotmentRows(fpsId, year, month, ctypes, keep.map((r) => r.sourceIdentifier));
         await this.recomputeFrom(fpsId, year, month);
         const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
-        return { allotmentRows: rows.length, roCount: 0, truckChitCount: 0, summary, warnings };
+        return { allotmentRows: keep.length, roCount: 0, truckChitCount: 0, summary, warnings };
     }
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {

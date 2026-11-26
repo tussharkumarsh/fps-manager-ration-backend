@@ -78,7 +78,9 @@ export function parseEposJson(body: unknown): { transactions: Transaction[]; unk
       const field = txFieldForCommodity(name);
       if (field) {
         qty[field] += amount;
-      } else {
+      } else if (amount) {
+        // The portal lists the shop's whole commodity set on every record;
+        // only a commodity actually sold counts as a new column.
         extraItems[name] = (extraItems[name] || 0) + amount;
         unknown.add(name);
       }

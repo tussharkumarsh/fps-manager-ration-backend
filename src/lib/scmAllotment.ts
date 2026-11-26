@@ -1,3 +1,4 @@
+import { normalizeCommodity } from "./commodity";
 import type { ScmInventoryTransaction } from "../types";
 
 /**
@@ -102,10 +103,23 @@ export function allotmentToScmTxns(input: {
     }));
 }
 
-/** Real truck-chit receipts beat allotment figures for the same month. */
+const receiptKey = (t: ScmInventoryTransaction) => `${(t.scheme || "").trim().toUpperCase()}|${normalizeCommodity(t.commodity)}`;
+
+/**
+ * Real truck-chit receipts beat allotment figures — per scheme × commodity,
+ * so an old receipt for PHH Wheat doesn't hide the month's Rice allotment.
+ */
 export function preferActualReceipts(txns: ScmInventoryTransaction[]): ScmInventoryTransaction[] {
-  const actual = txns.filter((t) => !t.truckChitNo.startsWith(ALLOTMENT_PREFIX));
-  return actual.length > 0 ? actual : txns;
+  const withActual = new Set(txns.filter((t) => !t.truckChitNo.startsWith(ALLOTMENT_PREFIX)).map(receiptKey));
+  return txns.filter((t) => !t.truckChitNo.startsWith(ALLOTMENT_PREFIX) || !withActual.has(receiptKey(t)));
+}
+
+/**
+ * Allotment types whose requests all succeeded this sync. Only these may have
+ * their stored rows replaced; a type that failed keeps what an earlier sync saved.
+ */
+export function replaceableCtypes(ctypes: string[], failedCtypes: Set<string>): string[] {
+  return ctypes.filter((c) => !failedCtypes.has(c));
 }
 
 /** District / mandal display names the portal's form sends alongside the codes, keyed by AFSO code. */

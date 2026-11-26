@@ -65,3 +65,18 @@ export function withAllotment<T extends { commodity: string; alloted: number; al
       : e
   );
 }
+
+/**
+ * When this sync couldn't fetch the allotment, keep what an earlier sync
+ * stored (the register itself always reports 0) instead of overwriting it.
+ */
+export function carryOverAllotment<T extends { commodity: string; alloted: number; allotedByScheme?: Record<string, number> }>(
+  fresh: T[],
+  stored: { commodity: string; alloted: number; allotedByScheme?: Record<string, number> }[]
+): T[] {
+  const byCommodity = new Map(stored.map((s) => [s.commodity, s]));
+  return fresh.map((e) => {
+    const old = byCommodity.get(e.commodity);
+    return old && old.alloted ? { ...e, alloted: old.alloted, allotedByScheme: old.allotedByScheme ?? {} } : e;
+  });
+}

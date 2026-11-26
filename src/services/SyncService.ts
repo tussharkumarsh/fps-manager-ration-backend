@@ -3,7 +3,10 @@ import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
 import { InventoryService } from "./InventoryService";
-import { currentIstYearMonth } from "../lib/ids";
+import { currentIstYearMonth, withTimeout } from "../lib/ids";
+
+/** Follow-up work after a sync must finish by this point of the request (Vercel maxDuration is 60s). */
+const BEST_EFFORT_DEADLINE_MS = 50_000;
 import { compareDaily, summarizeByDate } from "../lib/dailyVerify";
 import type { MonthLock, Transaction } from "../types";
 
@@ -98,6 +101,7 @@ export class SyncService {
 
     // forceRefresh — an explicit manual sync request. Always hits the gov
     // API and stores the result, regardless of any existing lock.
+    const startedAt = Date.now();
     const current = isCurrentMonth(year, month);
     const { transactions, unknownColumns } = await this.fetchAndStore(
       distCode,
@@ -107,21 +111,22 @@ export class SyncService {
       current ? "live" : "synced_locked"
     );
 
-    // The SCM stock summary's "distributed" comes from these transactions,
-    // and later months open with this month's closing — rebuild them. A
-    // failure here must not fail the transaction sync that already succeeded.
-    try {
-      await this.scmService.recomputeFrom(fpsId, year, month);
-    } catch (err) {
-      console.error("SCM summary recompute after transaction sync failed", { err, fpsId, year, month });
-    }
-
-    // The government stock register is what dealers see as their stock, so
-    // refresh it alongside the month's sales. Best effort, like the recompute.
-    try {
-      await this.inventoryService.syncGovStockRegister(fpsId, distCode, year, month);
-    } catch (err) {
-      console.error("Gov stock register refresh after transaction sync failed", { err, fpsId, year, month });
+    // Follow-up work, best effort: rebuild the SCM stock summary (its
+    // "distributed" comes from these sales, and later months open with this
+    // month's closing) and refresh the government stock register. Neither may
+    // fail — or time out — the transaction sync that already succeeded, so they
+    // share whatever is left of the serverless time limit.
+    const budgetMs = BEST_EFFORT_DEADLINE_MS - (Date.now() - startedAt);
+    const followUp = Promise.all([
+      this.scmService.recomputeFrom(fpsId, year, month).catch((err) => {
+        console.error("SCM summary recompute after transaction sync failed", { err, fpsId, year, month });
+      }),
+      this.inventoryService.syncGovStockRegister(fpsId, distCode, year, month).catch((err) => {
+        console.error("Gov stock register refresh after transaction sync failed", { err, fpsId, year, month });
+      }),
+    ]);
+    if ((await withTimeout(followUp, budgetMs)) === undefined) {
+      console.error("Follow-up after transaction sync ran out of time", { fpsId, year, month, budgetMs });
     }
 
     const newLock = await this.lockRepo.get(fpsId, year, month);
