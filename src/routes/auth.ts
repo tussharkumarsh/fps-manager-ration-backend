@@ -6,12 +6,12 @@ const authService = new AuthService();
 
 router.post("/verify", async (req, res) => {
   try {
-    const { identifier, password } = req.body ?? {};
+    const { identifier, password, clientIp } = req.body ?? {};
     if (!identifier || !password) {
       res.status(400).json({ error: "identifier and password are required" });
       return;
     }
-    const result = await authService.verifyCredentials(identifier, password);
+    const result = await authService.verifyCredentials(identifier, password, typeof clientIp === "string" ? clientIp : undefined);
     if (result === "locked") {
       res.json({ success: true, result: null, locked: true });
       return;
