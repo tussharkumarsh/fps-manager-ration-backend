@@ -12,14 +12,19 @@ import type { ScmInventoryTransaction } from "../types";
  * those win (preferActualReceipts).
  */
 
-export const ALLOTMENT_TYPES = [
+/**
+ * `optional`: the portal answers EXTRA PERCENTAGE with a bare "Error"
+ * (rather than "No data found") for shops with nothing under it, so its
+ * failure is reported as a warning instead of failing the whole sync.
+ */
+export const ALLOTMENT_TYPES: readonly { ctype: string; name: string; optional?: boolean }[] = [
   { ctype: "1", name: "REGULAR" },
   { ctype: "2", name: "EXTRA" },
   { ctype: "3", name: "PORT" },
   { ctype: "4", name: "ADVANCE" },
   { ctype: "5", name: "ADHOC" },
-  { ctype: "6", name: "EXTRA PERCENTAGE" },
-] as const;
+  { ctype: "6", name: "EXTRA PERCENTAGE", optional: true },
+];
 
 /** comm_id values from the portal's Commodity dropdown. Add SAREE/FRice/Maize/Ragi once their ids are known. */
 export const ALLOTMENT_COMMODITIES = [

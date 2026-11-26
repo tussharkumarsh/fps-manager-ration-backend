@@ -66,3 +66,7 @@ test('findShopAllotment treats "No data found" as no allotment, not an error', (
     assert.equal(findShopAllotment({ rep_code: '204', rep_message: 'No data found' }, '151209500212'), null);
     assert.equal(findShopAllotment({ rep_code: '500', rep_message: 'No Data Found.' }, '151209500212'), null);
 });
+
+test('only EXTRA PERCENTAGE is optional (the portal errors on it instead of returning no data)', () => {
+    assert.deepEqual(ALLOTMENT_TYPES.filter((t) => t.optional).map((t) => t.ctype), ['6']);
+});

@@ -26,6 +26,7 @@ export class ScmInventoryService {
 
         const rows: ScmInventoryTransaction[] = [];
         const failures: string[] = [];
+        const warnings: string[] = [];
         // A few requests at a time: each returns the whole mandal, and the
         // portal is slow and occasionally errors.
         for (let i = 0; i < jobs.length; i += 6) {
@@ -48,7 +49,8 @@ export class ScmInventoryService {
                             rows.push(...allotmentToScmTxns({ fpsId, year, month, ctype: t.ctype, commodity: c.name, unit: c.unit, allotment }));
                         }
                     } catch (err) {
-                        failures.push(`${c.name}/${t.name}: ${err instanceof Error ? err.message : String(err)}`);
+                        const msg = `${c.name}/${t.name}: ${err instanceof Error ? err.message : String(err)}`;
+                        (t.optional ? warnings : failures).push(msg);
                     }
                 })
             );
@@ -63,7 +65,7 @@ export class ScmInventoryService {
         await this.repo.upsertTransactions(rows);
         await this.recomputeFrom(fpsId, year, month);
         const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
-        return { allotmentRows: rows.length, roCount: 0, truckChitCount: 0, summary };
+        return { allotmentRows: rows.length, roCount: 0, truckChitCount: 0, summary, warnings };
     }
 
     async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
