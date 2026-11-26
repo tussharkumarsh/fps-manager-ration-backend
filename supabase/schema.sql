@@ -231,3 +231,5 @@ create table if not exists login_attempts (
   attempted_at timestamptz not null default now()
 );
 create index if not exists login_attempts_idx on login_attempts (identifier, attempted_at);
+-- RLS on with no policies: only the service_role backend can touch it.
+alter table login_attempts enable row level security;
