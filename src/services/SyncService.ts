@@ -4,6 +4,7 @@ import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
 import { InventoryService } from "./InventoryService";
 import { currentIstYearMonth, withTimeout } from "../lib/ids";
+import { noAllocationMonths } from "../lib/allocationCoverage";
 
 /** Follow-up work after a sync must finish by this point of the request (Vercel maxDuration is 60s). */
 const BEST_EFFORT_DEADLINE_MS = 50_000;
@@ -14,6 +15,13 @@ function isCurrentMonth(year: string, month: string): boolean {
   const now = currentIstYearMonth();
   return now.year === String(year) && now.month === String(parseInt(month, 10));
 }
+
+export type ListedLock = Omit<MonthLock, "status"> & {
+  status: MonthLock["status"] | "no_allocation";
+  storedCount: number;
+  /** For "no_allocation": the allocation month that was distributed through this month. */
+  coveredBy?: { year: string; month: string };
+};
 
 export interface MonthDataResult {
   transactions: Transaction[];
@@ -55,13 +63,40 @@ export class SyncService {
    * Month locks for a year, each with how many transactions are actually
    * stored for that month — a lock can outlive its data (e.g. after a
    * reset), and such a month must still count as missing.
+   *
+   * Months with no allocation of their own (an earlier allocation was
+   * distributed through them, and the portal has no report for them) come
+   * back as status "no_allocation" with the covering allocation month, so
+   * "Sync missing months" skips them instead of failing on them every run.
    */
-  async listLocks(fpsId: string, year: string): Promise<(MonthLock & { storedCount: number })[]> {
-    const [locks, counts] = await Promise.all([
+  async listLocks(fpsId: string, year: string): Promise<ListedLock[]> {
+    const prevYear = String(parseInt(year, 10) - 1);
+    const [locks, records] = await Promise.all([
       this.lockRepo.listForYear(fpsId, year),
-      this.txnRepo.countsForYear(fpsId, year),
+      this.txnRepo.allocationRecords(fpsId, [prevYear, year]),
     ]);
-    return locks.map((l) => ({ ...l, storedCount: counts.get(String(parseInt(l.month, 10))) || 0 }));
+    const counts = new Map<string, number>();
+    for (const r of records) {
+      if (String(r.year).trim() !== String(year).trim()) continue;
+      const m = String(parseInt(r.month, 10));
+      counts.set(m, (counts.get(m) || 0) + 1);
+    }
+    const covered = noAllocationMonths(records, year, currentIstYearMonth());
+
+    const listed: ListedLock[] = locks.map((l) => {
+      const m = String(parseInt(l.month, 10));
+      const storedCount = counts.get(m) || 0;
+      const by = covered.get(m);
+      return by
+        ? { ...l, status: "no_allocation", storedCount, coveredBy: by }
+        : { ...l, storedCount };
+    });
+    const listedMonths = new Set(listed.map((l) => String(parseInt(l.month, 10))));
+    for (const [m, by] of Array.from(covered.entries())) {
+      if (listedMonths.has(m)) continue;
+      listed.push({ fpsId, year, month: m, status: "no_allocation", lastSyncedAt: "", recordCount: 0, storedCount: 0, coveredBy: by });
+    }
+    return listed;
   }
 
   /**
@@ -131,7 +166,10 @@ export class SyncService {
 
     const newLock = await this.lockRepo.get(fpsId, year, month);
     return {
-      transactions,
+      // Tag each record with the allocation (ration) month it was fetched
+      // for, as stored reads already carry: a record's date can fall in a
+      // later calendar month (e.g. one allocation distributed over months).
+      transactions: transactions.map((t) => ({ ...t, year: String(year), month: String(parseInt(month, 10)) })),
       source: "gov_api",
       lockStatus: newLock?.status ?? (current ? "live" : "synced_locked"),
       unknownColumns,

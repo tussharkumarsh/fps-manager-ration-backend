@@ -50,6 +50,9 @@ export interface Transaction {
   extraItems?: Record<string, number>;
   customerName?: string;
   monthDate?: string;
+  /** Allocation (ration) month the record belongs to on the portal — not always the calendar month of `date`. */
+  year?: string;
+  month?: string;
 }
 
 export interface InventoryItem {

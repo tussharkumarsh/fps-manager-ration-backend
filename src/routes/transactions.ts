@@ -84,7 +84,13 @@ router.get("/locks", async (req, res) => {
     const locks = await syncService.listLocks(fpsId, year);
     res.json({
       success: true,
-      locks: locks.map((l) => ({ month: l.month, status: l.status, recordCount: l.recordCount, storedCount: l.storedCount })),
+      locks: locks.map((l) => ({
+        month: l.month,
+        status: l.status,
+        recordCount: l.recordCount,
+        storedCount: l.storedCount,
+        coveredBy: l.coveredBy,
+      })),
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
