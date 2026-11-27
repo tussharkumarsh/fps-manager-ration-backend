@@ -237,3 +237,20 @@ alter table login_attempts enable row level security;
 -- Added 2026-11-26: per-scheme allotment (e.g. {"PHH": 2358, "AAY": 1155})
 -- from the portal's Detailed Allotment report, alongside the total in `alloted`.
 alter table gov_stock_register add column if not exists alloted_by_scheme jsonb not null default '{}'::jsonb;
+
+-- Added 2026-11-27: each dealer's own contact book of the other shops whose
+-- ration cards collect at their shop (portability). shop_fps_id is the FPS
+-- number the ePOS portability column shows for those transactions.
+create table if not exists other_shops (
+  fps_id text not null,
+  shop_fps_id text not null,
+  shop_name text not null default '',
+  dealer_name text not null default '',
+  mobile text not null default '',
+  alt_mobile text not null default '',
+  address text not null default '',
+  notes text not null default '',
+  updated_at timestamptz not null default now(),
+  primary key (fps_id, shop_fps_id)
+);
+alter table other_shops enable row level security;

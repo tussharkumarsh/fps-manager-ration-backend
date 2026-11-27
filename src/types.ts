@@ -196,3 +196,18 @@ export interface StoredTransaction extends Transaction {
   fetchedAt: string;
   source: "api" | "manual";
 }
+
+/** A dealer's saved contact details for another shop (FPS) whose cards collect at theirs. */
+export interface OtherShop {
+  /** The dealer who saved it. */
+  fpsId: string;
+  /** The other shop's FPS number, as the ePOS portability column shows it. */
+  shopFpsId: string;
+  shopName: string;
+  dealerName: string;
+  mobile: string;
+  altMobile: string;
+  address: string;
+  notes: string;
+  updatedAt: string;
+}
