@@ -1,6 +1,7 @@
 import { parseStockRegisterJson } from "../lib/stockRegisterParser";
 import { parseSchemeAllotment, type ShopSchemeAllotment } from "../lib/schemeAllotment";
 import { parseEposJson } from "../lib/eposJsonParser";
+import { parseAfsoOwners, type FpsDirectoryEntry } from "../lib/fpsDirectory";
 import { parseDailyTotals, type DayTotals } from "../lib/dailyVerify";
 import type { Transaction, GovStockRegisterEntry } from "../types";
 
@@ -12,6 +13,7 @@ const DAILY_TOTALS_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/dateWiseT
 const SCHEME_ALLOTMENT_ALL_URL = "https://epos.mahafood.gov.in/Epos_Spring/SchemeAllotmentAll/get_Scheme_Allot_All_FPS";
 const SCHEME_ALLOTMENT_URL = "https://epos.mahafood.gov.in/Epos_Spring/SchemeAllotment/get_Scheme_Allot_FPS";
 const STOCK_REGISTER_URL = "https://epos.mahafood.gov.in/Epos_Spring/fps/getfpsStockregister";
+const AFSO_OWNERS_URL = "https://epos.mahafood.gov.in/Epos_Spring/api/fps/afsoOwnerDetails";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,21 +32,33 @@ export class GovApiClient {
    * portal changed, not that it's unreachable).
    */
   private async postEposJson(url: string, payload: Record<string, string>, maxAttempts = 4): Promise<unknown> {
-    const body = JSON.stringify(payload);
+    return this.requestEposJson(url, { method: "POST", body: JSON.stringify(payload) }, maxAttempts);
+  }
+
+  /** GET with query parameters, same retry and parsing rules as postEposJson. */
+  private async getEposJson(url: string, query: Record<string, string>, maxAttempts = 4): Promise<unknown> {
+    return this.requestEposJson(`${url}?${new URLSearchParams(query).toString()}`, { method: "GET" }, maxAttempts);
+  }
+
+  private async requestEposJson(
+    url: string,
+    init: { method: "GET" | "POST"; body?: string },
+    maxAttempts: number
+  ): Promise<unknown> {
     let lastErr: unknown;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let text: string;
       try {
         const response = await fetch(url, {
-          method: "POST",
+          method: init.method,
           headers: {
-            "Content-Type": "application/json",
+            ...(init.body ? { "Content-Type": "application/json" } : {}),
             "User-Agent": "Mozilla/5.0",
             Accept: "application/json, text/plain, */*",
             Origin: "https://epos.mahafood.gov.in",
             Referer: "https://epos.mahafood.gov.in/",
           },
-          body,
+          body: init.body,
           // A hung portal connection must not eat the whole serverless time limit.
           signal: AbortSignal.timeout(PORTAL_TIMEOUT_MS),
         });
@@ -93,6 +107,12 @@ export class GovApiClient {
       maxAttempts
     );
     return parseEposJson(json);
+  }
+
+  /** Every shop of one AFSO office, from the portal's public "FPS Details" directory. */
+  async fetchAfsoOwners(officeCode: string): Promise<FpsDirectoryEntry[]> {
+    const json = await this.getEposJson(AFSO_OWNERS_URL, { officeCode, status: "T" });
+    return parseAfsoOwners(json, officeCode);
   }
 
   /** The portal's own per-day sales totals for a month — used only to verify our stored data. */

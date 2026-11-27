@@ -211,3 +211,5 @@ export interface OtherShop {
   notes: string;
   updatedAt: string;
 }
+
+export type { FpsDirectoryEntry } from "./lib/fpsDirectory";

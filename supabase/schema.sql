@@ -254,3 +254,22 @@ create table if not exists other_shops (
   primary key (fps_id, shop_fps_id)
 );
 alter table other_shops enable row level security;
+
+-- Added 2026-11-27: the portal's public FPS directory ("FPS Details",
+-- /Epos_Spring/api/fps/afsoOwnerDetails), fetched per AFSO office on demand.
+-- Shared by every dealer; holds no dealer's own data.
+create table if not exists fps_directory (
+  shop_fps_id text primary key,
+  office_code text not null,
+  owner_name text not null default '',
+  terminal_id text not null default '',
+  mobile_masked text not null default '',
+  dist_name text not null default '',
+  afso_name text not null default '',
+  total_cards integer not null default 0,
+  longitude double precision,
+  latitude double precision,
+  fetched_at timestamptz not null default now()
+);
+create index if not exists fps_directory_office_idx on fps_directory (office_code);
+alter table fps_directory enable row level security;
