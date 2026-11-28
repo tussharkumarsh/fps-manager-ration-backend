@@ -225,3 +225,34 @@ export interface OtherShop {
 }
 
 export type { FpsDirectoryEntry } from "./lib/fpsDirectory";
+
+/** The footer summary printed at the bottom of a beneficiary file; null = not in the file. */
+export type BeneficiaryFooter = Record<
+  | "totalCards" | "femaleHof" | "maleHof" | "totalMembers"
+  | "age0to5" | "age5to12" | "age12to60" | "age60plus"
+  | "validUid" | "invalidUid" | "validMobile" | "invalidMobile"
+  | "female" | "male",
+  number | null
+> & { maleHofn: string | null; femaleHofn: string | null };
+
+/** One beneficiary-file upload: the file's header and footer, and what the merge did. */
+export interface BeneficiaryImport {
+  id: string;
+  fpsId: string;
+  sourceFpsId: string;
+  sourceFpsName: string;
+  district: string;
+  dfso: string;
+  tfso: string;
+  officeCode: string;
+  fileName: string;
+  importedAt: string;
+  cards: number;
+  members: number;
+  aayCards: number;
+  phhCards: number;
+  footer: BeneficiaryFooter;
+  newCards: number;
+  updatedCards: number;
+  missingCards: number;
+}

@@ -107,3 +107,24 @@ export function mergeBeneficiary(
   out.portal_synced_at = importedAt;
   return out;
 }
+
+/**
+ * Cards of `sourceFpsId` that this upload (stamped `importedAt`) did not
+ * touch — the "not in latest file" count. On the dealer's own FPS, rows
+ * imported before sources existed (empty source) are own cards too.
+ */
+export function countMissing(
+  rows: CustomerRow[],
+  sourceFpsId: string,
+  importedAt: string,
+  dealerFpsId: string
+): number {
+  const own = sourceFpsId === dealerFpsId;
+  const stamp = new Date(importedAt).getTime();
+  return rows.filter((r) => {
+    const src = r.source_fps_id || "";
+    const sameSource = src === sourceFpsId || (own && src === "");
+    const touched = !!r.portal_synced_at && new Date(r.portal_synced_at).getTime() === stamp;
+    return sameSource && !touched;
+  }).length;
+}

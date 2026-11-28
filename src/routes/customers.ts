@@ -3,6 +3,8 @@ import { TransactionService } from "../services/TransactionService";
 import { AuthService } from "../services/AuthService";
 
 const router = Router();
+
+const isIsoTime = (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(v));
 const transactionService = new TransactionService();
 const authService = new AuthService();
 
@@ -70,14 +72,67 @@ router.patch("/", async (req, res) => {
 });
 
 router.post("/import", async (req, res) => {
-  const { fpsId, customers } = req.body ?? {};
+  const { fpsId, customers, importedAt } = req.body ?? {};
   if (!fpsId || !Array.isArray(customers)) {
     res.status(400).json({ error: "fpsId and customers[] are required" });
     return;
   }
+  if (importedAt !== undefined && !isIsoTime(importedAt)) {
+    res.status(400).json({ error: "importedAt must be an ISO time" });
+    return;
+  }
   try {
-    const savedCount = await transactionService.importCustomers(fpsId, customers);
-    res.json({ success: true, savedCount });
+    const result = await transactionService.importCustomers(fpsId, customers, importedAt);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Latest beneficiary-file upload per source FPS, for the FPS-wise summary. */
+router.get("/imports", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  if (!fpsId) {
+    res.status(400).json({ error: "fpsId is required" });
+    return;
+  }
+  try {
+    const imports = await transactionService.listImports(fpsId);
+    res.json({ success: true, imports });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Records a finished beneficiary-file upload (after all its chunks). */
+router.post("/imports", async (req, res) => {
+  const { fpsId, upload } = req.body ?? {};
+  if (!fpsId || !upload || !/^d+$/.test(String(upload.sourceFpsId ?? "")) || !isIsoTime(upload.importedAt)) {
+    res.status(400).json({ error: "fpsId and upload { sourceFpsId, importedAt, ... } are required" });
+    return;
+  }
+  const num = (v: unknown) => (Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0);
+  const str = (v: unknown) => String(v ?? "").slice(0, 300);
+  try {
+    const saved = await transactionService.recordImport(fpsId, {
+      fpsId,
+      sourceFpsId: String(upload.sourceFpsId),
+      sourceFpsName: str(upload.sourceFpsName),
+      district: str(upload.district),
+      dfso: str(upload.dfso),
+      tfso: str(upload.tfso),
+      officeCode: str(upload.officeCode),
+      fileName: str(upload.fileName),
+      importedAt: upload.importedAt,
+      cards: num(upload.cards),
+      members: num(upload.members),
+      aayCards: num(upload.aayCards),
+      phhCards: num(upload.phhCards),
+      footer: upload.footer && typeof upload.footer === "object" ? upload.footer : {},
+      newCards: num(upload.newCards),
+      updatedCards: num(upload.updatedCards),
+    });
+    res.json({ success: true, import: saved });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }

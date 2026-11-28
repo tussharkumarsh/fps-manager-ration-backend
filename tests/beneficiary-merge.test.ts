@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isFullMobile, mergeBeneficiary, type CustomerRow } from "../src/lib/beneficiaryMerge";
+import { countMissing, isFullMobile, mergeBeneficiary, type CustomerRow } from "../src/lib/beneficiaryMerge";
 import type { Customer } from "../src/types";
 
 const AT = "2026-11-28T10:00:00.000Z";
@@ -111,4 +111,23 @@ test("source FPS is replaced by the latest file", () => {
   );
   assert.equal(out.source_fps_id, "151209500199");
   assert.equal(out.source_fps_name, "DHANAJI");
+});
+
+test("countMissing counts only same-source cards not touched by this upload", () => {
+  const rows = [
+    row({ src_no: "1", source_fps_id: "151209500212", portal_synced_at: AT }), // in this upload
+    row({ src_no: "2", source_fps_id: "151209500212", portal_synced_at: "2026-11-01T00:00:00Z" }), // older upload
+    row({ src_no: "3", source_fps_id: null, portal_synced_at: null }), // imported before sources existed: own card
+    row({ src_no: "4", source_fps_id: "151209500199", portal_synced_at: "2026-11-01T00:00:00Z" }), // other source
+  ];
+  // Own FPS upload: an own card with no source yet counts as missing too.
+  assert.equal(countMissing(rows, "151209500212", AT, "151209500212"), 2);
+  // Another FPS upload: only that FPS cards.
+  assert.equal(countMissing(rows, "151209500199", AT, "151209500212"), 1);
+});
+
+test("countMissing compares times, not timestamp text", () => {
+  // Postgres returns timestamptz as "+00:00", the upload stamp is "...Z".
+  const rows = [row({ src_no: "1", source_fps_id: "151209500199", portal_synced_at: "2026-11-28T10:00:00+00:00" })];
+  assert.equal(countMissing(rows, "151209500199", AT, "151209500212"), 0);
 });

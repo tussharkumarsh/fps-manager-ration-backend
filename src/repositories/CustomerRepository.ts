@@ -1,23 +1,6 @@
 import { supabase, fetchAllRows } from "../lib/supabase";
 import type { Customer } from "../types";
-
-interface CustomerRow {
-  fps_id: string;
-  src_no: string;
-  name: string;
-  last_dispatched: string | null;
-  scheme: string | null;
-  s_no: number | null;
-  area_type: string | null;
-  status: string | null;
-  member_count: number | null;
-  mobile: string | null;
-  family_head: string | null;
-  members_json: Customer["members"] | null;
-  disabled: boolean | null;
-  disabled_reason: string | null;
-  disabled_at: string | null;
-}
+import { mergeBeneficiary, type CustomerRow, type WritableCustomerRow } from "../lib/beneficiaryMerge";
 
 function rowToCustomer(row: CustomerRow): Customer {
   return {
@@ -35,16 +18,17 @@ function rowToCustomer(row: CustomerRow): Customer {
     disabled: row.disabled || undefined,
     disabledReason: row.disabled_reason || undefined,
     disabledAt: row.disabled_at || undefined,
+    sourceFpsId: row.source_fps_id || undefined,
+    sourceFpsName: row.source_fps_name || undefined,
+    portalSyncedAt: row.portal_synced_at || undefined,
+    approvalDate: row.approval_date || undefined,
+    approvedBy: row.approved_by || undefined,
+    statusCode: row.status_code || undefined,
+    portalMobile: row.portal_mobile || undefined,
   };
 }
 
-// Deliberately excludes disabled/disabled_reason/disabled_at: imports and
-// the manual "add customer" flow never carry disable state, and including
-// them here (even as `false`/`null`) would count as an explicit value in
-// upsertMany's merge and silently re-enable an already-disabled customer on
-// the next import. Disable state is only ever written via update().
-type WritableCustomerRow = Omit<CustomerRow, "disabled" | "disabled_reason" | "disabled_at">;
-
+// Disable state is never part of an import row: see WritableCustomerRow.
 function customerToRow(fpsId: string, c: Customer): WritableCustomerRow {
   return {
     fps_id: fpsId,
@@ -59,6 +43,13 @@ function customerToRow(fpsId: string, c: Customer): WritableCustomerRow {
     mobile: c.mobile || null,
     family_head: c.familyHead || null,
     members_json: c.members && c.members.length > 0 ? c.members : null,
+    source_fps_id: c.sourceFpsId || null,
+    source_fps_name: c.sourceFpsName || null,
+    portal_synced_at: c.portalSyncedAt || null,
+    approval_date: c.approvalDate || null,
+    approved_by: c.approvedBy || null,
+    status_code: c.statusCode || null,
+    portal_mobile: c.portalMobile || null,
   };
 }
 
@@ -114,6 +105,50 @@ export class CustomerRepository {
       if (error) throw new Error(`CustomerRepository.upsertMany: ${error.message}`);
     }
     return merged.length;
+  }
+
+  /** Every stored row for this dealer, as raw rows (for merge bookkeeping). */
+  async getRows(fpsId: string): Promise<CustomerRow[]> {
+    return fetchAllRows<CustomerRow>((from, to) =>
+      supabase.from("customers").select("*").eq("fps_id", fpsId.trim()).range(from, to)
+    );
+  }
+
+  /**
+   * Merges cards from a government beneficiary file (see mergeBeneficiary):
+   * file data refreshes each card, the dealer's mobile and disable state
+   * are kept, and every card is stamped with `importedAt`.
+   */
+  async importBeneficiaries(
+    fpsId: string,
+    customers: Customer[],
+    importedAt: string
+  ): Promise<{ saved: number; newCards: number; updatedCards: number }> {
+    if (customers.length === 0) return { saved: 0, newCards: 0, updatedCards: 0 };
+    const trimmed = fpsId.trim();
+    const existingBySrcNo = new Map((await this.getRows(trimmed)).map((r) => [r.src_no, r]));
+
+    // A card listed twice in one upload is written once (last wins).
+    const bySrcNo = new Map(customers.map((c) => [c.srcNo, c]));
+    let newCards = 0;
+    const merged = Array.from(bySrcNo.values()).map((c) => {
+      const existing = existingBySrcNo.get(c.srcNo);
+      if (!existing) newCards++;
+      return mergeBeneficiary(trimmed, existing, c, importedAt);
+    });
+
+    await this.upsertRows(merged);
+    return { saved: merged.length, newCards, updatedCards: merged.length - newCards };
+  }
+
+  private async upsertRows(rows: WritableCustomerRow[]): Promise<void> {
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const { error } = await supabase
+        .from("customers")
+        .upsert(rows.slice(i, i + BATCH_SIZE), { onConflict: "fps_id,src_no" });
+      if (error) throw new Error(`CustomerRepository.upsertRows: ${error.message}`);
+    }
   }
 
   async add(fpsId: string, customer: Customer): Promise<void> {
