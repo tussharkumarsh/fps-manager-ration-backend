@@ -1,6 +1,7 @@
 import { GovApiClient } from "../clients/GovApiClient";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
+import { CustomerRepository } from "../repositories/CustomerRepository";
 import { ScmInventoryService } from "./ScmInventoryService";
 import { InventoryService } from "./InventoryService";
 import { currentIstYearMonth, withTimeout } from "../lib/ids";
@@ -47,6 +48,7 @@ export class SyncService {
   private govApi = new GovApiClient();
   private txnRepo = new TransactionRepository();
   private lockRepo = new MonthLockRepository();
+  private customerRepo = new CustomerRepository();
   private scmService = new ScmInventoryService();
   private inventoryService = new InventoryService();
 
@@ -193,6 +195,13 @@ export class SyncService {
 
     // Upsert only: receipts already stored are never deleted by a re-sync.
     await this.txnRepo.upsertMany(fpsId, year, month, transactions, "api");
+    // A disabled card that collected after being disabled is active again.
+    // Non-fatal: a failure here must not fail the sync itself.
+    try {
+      await this.customerRepo.reEnableAfterTransactions(fpsId, transactions);
+    } catch (err) {
+      console.error("Auto re-enable after sync failed:", err instanceof Error ? err.message : err);
+    }
     if (shouldLock) {
       await this.lockRepo.upsert({
         fpsId,

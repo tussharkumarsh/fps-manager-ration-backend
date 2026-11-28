@@ -1,6 +1,7 @@
 import { supabase, fetchAllRows } from "../lib/supabase";
 import type { Customer } from "../types";
 import { mergeBeneficiary, type CustomerRow, type WritableCustomerRow } from "../lib/beneficiaryMerge";
+import { cardsToReEnable } from "../lib/autoEnable";
 
 function rowToCustomer(row: CustomerRow): Customer {
   return {
@@ -149,6 +150,34 @@ export class CustomerRepository {
         .upsert(rows.slice(i, i + BATCH_SIZE), { onConflict: "fps_id,src_no" });
       if (error) throw new Error(`CustomerRepository.upsertRows: ${error.message}`);
     }
+  }
+
+  /**
+   * Re-enables disabled cards that collected ration after being disabled
+   * (see cardsToReEnable). Returns the ration card numbers re-enabled.
+   */
+  async reEnableAfterTransactions(fpsId: string, txns: { srcNo: string; date: string }[]): Promise<string[]> {
+    if (txns.length === 0) return [];
+    const trimmed = fpsId.trim();
+    const { data, error } = await supabase
+      .from("customers")
+      .select("src_no, disabled_at")
+      .eq("fps_id", trimmed)
+      .eq("disabled", true);
+    if (error) throw new Error(`CustomerRepository.reEnableAfterTransactions: ${error.message}`);
+    const disabled = ((data as { src_no: string; disabled_at: string | null }[]) || []).map((r) => ({
+      srcNo: r.src_no,
+      disabledAt: r.disabled_at,
+    }));
+    const ids = cardsToReEnable(disabled, txns);
+    if (ids.length === 0) return [];
+    const { error: upErr } = await supabase
+      .from("customers")
+      .update({ disabled: false, disabled_reason: null, disabled_at: null })
+      .eq("fps_id", trimmed)
+      .in("src_no", ids);
+    if (upErr) throw new Error(`CustomerRepository.reEnableAfterTransactions: ${upErr.message}`);
+    return ids;
   }
 
   async add(fpsId: string, customer: Customer): Promise<void> {
