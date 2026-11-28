@@ -344,3 +344,20 @@ update fps_shop_profiles set fps_id = '151209500212' where fps_id is null;
 alter table fps_shop_profiles alter column fps_id set not null;
 alter table fps_shop_profiles drop constraint if exists fps_shop_profiles_pkey;
 alter table fps_shop_profiles add primary key (fps_id, shop_fps_id);
+
+-- Added 2026-11-28: one row per nightly auto-sync job (per dealer, per
+-- month for transactions, and SCM allotment). finished_at stays null when
+-- a job ran out of time.
+create table if not exists sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  fps_id text not null,
+  job text not null,
+  year text not null default '',
+  month text not null default '',
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  ok boolean,
+  detail text not null default ''
+);
+create index if not exists sync_runs_latest_idx on sync_runs (fps_id, started_at desc);
+alter table sync_runs enable row level security;

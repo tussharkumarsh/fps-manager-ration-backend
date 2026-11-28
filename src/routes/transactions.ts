@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { SyncService } from "../services/SyncService";
 import { AuthService } from "../services/AuthService";
+import { SyncRunRepository } from "../repositories/SyncRunRepository";
 
 const router = Router();
 const syncService = new SyncService();
 const authService = new AuthService();
+const syncRuns = new SyncRunRepository();
 
 /**
  * Every stored transaction belonging to every dealer, tagged with which
@@ -49,6 +51,20 @@ router.get("/", async (req, res) => {
       lockStatus: result.lockStatus,
       unknownColumns: result.unknownColumns,
     });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** This dealer's recent nightly auto-sync jobs, newest first. */
+router.get("/sync-runs", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  if (!fpsId) {
+    res.status(400).json({ error: "fpsId is required" });
+    return;
+  }
+  try {
+    res.json({ success: true, runs: await syncRuns.recent(fpsId) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }

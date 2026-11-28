@@ -10,6 +10,7 @@ import scmInventoryRoutes from "./routes/scmInventory";
 import resetAllRoutes from "./routes/resetAll";
 import goshwaraRoutes from "./routes/goshwara";
 import otherShopRoutes from "./routes/otherShops";
+import cronRoutes from "./routes/cron";
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || "").split(",").map((o) => o.trim());
@@ -34,6 +35,10 @@ app.get("/health/supabase", async (_req, res) => {
   }
   res.json({ status: "connected" });
 });
+
+// Vercel Cron's nightly auto-sync: authorised by its own CRON_SECRET bearer
+// (see routes/cron.ts), not by the internal key.
+app.use("/cron", cronRoutes);
 
 // Everything past this point is trusted server-to-server traffic from the
 // Next.js app only — see src/middleware/internalAuth.ts.
