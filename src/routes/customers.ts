@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isValidShopFpsId } from "../lib/otherShop";
 import { TransactionService } from "../services/TransactionService";
 import { AuthService } from "../services/AuthService";
 
@@ -107,7 +108,7 @@ router.get("/imports", async (req, res) => {
 /** Records a finished beneficiary-file upload (after all its chunks). */
 router.post("/imports", async (req, res) => {
   const { fpsId, upload } = req.body ?? {};
-  if (!fpsId || !upload || !/^d+$/.test(String(upload.sourceFpsId ?? "")) || !isIsoTime(upload.importedAt)) {
+  if (!fpsId || !upload || !isValidShopFpsId(upload.sourceFpsId) || !isIsoTime(upload.importedAt)) {
     res.status(400).json({ error: "fpsId and upload { sourceFpsId, importedAt, ... } are required" });
     return;
   }
@@ -116,7 +117,7 @@ router.post("/imports", async (req, res) => {
   try {
     const saved = await transactionService.recordImport(fpsId, {
       fpsId,
-      sourceFpsId: String(upload.sourceFpsId),
+      sourceFpsId: String(upload.sourceFpsId).trim(),
       sourceFpsName: str(upload.sourceFpsName),
       district: str(upload.district),
       dfso: str(upload.dfso),
