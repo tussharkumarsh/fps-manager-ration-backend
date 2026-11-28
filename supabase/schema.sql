@@ -273,3 +273,42 @@ create table if not exists fps_directory (
 );
 create index if not exists fps_directory_office_idx on fps_directory (office_code);
 alter table fps_directory enable row level security;
+
+-- Added 2026-11-28: government "FPS-wise RC & Member Details" uploads are
+-- merged into customers. Each card records which FPS's file it came from
+-- and when it was last present in an upload (the file carries no date).
+-- portal_mobile is the file's (usually masked) mobile; it never replaces
+-- the dealer's own `mobile`.
+alter table customers add column if not exists source_fps_id text;
+alter table customers add column if not exists source_fps_name text;
+alter table customers add column if not exists portal_synced_at timestamptz;
+alter table customers add column if not exists approval_date text;
+alter table customers add column if not exists approved_by text;
+alter table customers add column if not exists status_code text;
+alter table customers add column if not exists portal_mobile text;
+
+-- One row per beneficiary-file upload: the file's header and footer
+-- summary, plus what the merge did.
+create table if not exists beneficiary_imports (
+  id uuid primary key default gen_random_uuid(),
+  fps_id text not null,
+  source_fps_id text not null,
+  source_fps_name text not null default '',
+  district text not null default '',
+  dfso text not null default '',
+  tfso text not null default '',
+  office_code text not null default '',
+  file_name text not null default '',
+  imported_at timestamptz not null,
+  cards integer not null default 0,
+  members integer not null default 0,
+  aay_cards integer not null default 0,
+  phh_cards integer not null default 0,
+  footer jsonb not null default '{}'::jsonb,
+  new_cards integer not null default 0,
+  updated_cards integer not null default 0,
+  missing_cards integer not null default 0
+);
+create index if not exists beneficiary_imports_latest_idx
+  on beneficiary_imports (fps_id, source_fps_id, imported_at desc);
+alter table beneficiary_imports enable row level security;
