@@ -88,5 +88,7 @@ export class TransactionService {
 
   async clearAllCustomers(fpsId: string): Promise<void> {
     await this.customerRepo.clearAll(fpsId);
+    // The upload summaries describe those customers: they go with them.
+    await this.importRepo.clearAll(fpsId);
   }
 }

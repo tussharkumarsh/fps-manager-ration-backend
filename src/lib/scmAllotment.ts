@@ -126,3 +126,18 @@ export function replaceableCtypes(ctypes: string[], failedCtypes: Set<string>): 
 export const AFSO_NAMES: Record<string, { distName: string; afsoName: string }> = {
   "1512095": { distName: "Hingoli", afsoName: "HINGOLI" },
 };
+
+/**
+ * District / AFSO names for an office: the known table first, then the
+ * portal's FPS directory (which carries them for every office fetched), so
+ * dealers in any office send the names the portal's own form would.
+ */
+export function afsoNamesFor(
+  afsoCode: string,
+  directory: { officeCode: string; distName: string; afsoName: string }[]
+): { distName: string; afsoName: string } {
+  const known = AFSO_NAMES[afsoCode];
+  if (known) return known;
+  const hit = directory.find((e) => e.officeCode === afsoCode && (e.distName || e.afsoName));
+  return hit ? { distName: hit.distName, afsoName: hit.afsoName } : { distName: "", afsoName: "" };
+}

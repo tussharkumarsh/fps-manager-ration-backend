@@ -46,8 +46,13 @@ router.post("/directory/sync", async (req, res) => {
   }
 });
 
-/** Stored shop-report profiles for the given FPS numbers (?ids=a,b,c). */
+/** This dealer's stored shop-report profiles for the given FPS numbers (?fpsId=…&ids=a,b,c). */
 router.get("/profiles", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  if (!fpsId) {
+    res.status(400).json({ error: "fpsId is required" });
+    return;
+  }
   const ids = String(req.query.ids || "")
     .split(",")
     .map((s) => s.trim())
@@ -57,7 +62,7 @@ router.get("/profiles", async (req, res) => {
     return;
   }
   try {
-    res.json({ success: true, profiles: await profileRepo.listByIds(Array.from(new Set(ids))) });
+    res.json({ success: true, profiles: await profileRepo.listByIds(fpsId, Array.from(new Set(ids))) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
@@ -66,13 +71,14 @@ router.get("/profiles", async (req, res) => {
 /** Saves shop-report profiles (the caller keeps only shops related to the dealer). */
 router.post("/profiles", async (req, res) => {
   const raw = req.body?.profiles;
-  if (!Array.isArray(raw) || raw.length > 500) {
-    res.status(400).json({ error: "profiles[] (at most 500) is required" });
+  const fpsId = String(req.body?.fpsId || "");
+  if (!fpsId || !Array.isArray(raw) || raw.length > 500) {
+    res.status(400).json({ error: "fpsId and profiles[] (at most 500) are required" });
     return;
   }
   const profiles = raw.map(sanitizeProfile).filter((p): p is ShopProfile => p !== null);
   try {
-    const result = await profileRepo.saveNewer(profiles);
+    const result = await profileRepo.saveNewer(fpsId, profiles);
     res.json({ success: true, ...result, rejected: raw.length - profiles.length });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });

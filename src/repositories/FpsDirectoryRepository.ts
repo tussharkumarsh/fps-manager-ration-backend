@@ -59,4 +59,15 @@ export class FpsDirectoryRepository {
     if (error) throw new Error(`FpsDirectoryRepository.upsertMany: ${error.message}`);
     return rows.length;
   }
+
+  /** A few directory entries of one AFSO office (enough to read its names). */
+  async sampleByOffice(officeCode: string): Promise<FpsDirectoryEntry[]> {
+    const { data, error } = await supabase
+      .from("fps_directory")
+      .select("*")
+      .eq("office_code", officeCode)
+      .limit(5);
+    if (error) throw new Error(`FpsDirectoryRepository.sampleByOffice: ${error.message}`);
+    return ((data as FpsDirectoryRow[]) || []).map(rowToEntry);
+  }
 }

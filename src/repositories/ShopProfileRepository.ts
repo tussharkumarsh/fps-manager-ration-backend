@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase";
 import { pickNewer, type ShopCounts, type ShopProfile } from "../lib/shopProfile";
 
 interface ShopProfileRow {
+  fps_id: string;
   shop_fps_id: string;
   office_code: string;
   dealer_name: string;
@@ -41,8 +42,9 @@ function toProfile(r: ShopProfileRow): ShopProfile {
   };
 }
 
-function toRow(p: ShopProfile): ShopProfileRow {
+function toRow(fpsId: string, p: ShopProfile): ShopProfileRow {
   return {
+    fps_id: fpsId,
     shop_fps_id: p.shopFpsId,
     office_code: p.officeCode,
     dealer_name: p.dealerName,
@@ -62,26 +64,40 @@ function toRow(p: ShopProfile): ShopProfileRow {
   };
 }
 
-/** Shop profiles from the government shop report, shared by every dealer (public data). */
+/**
+ * Shop profiles from the government shop report. Each dealer keeps his own
+ * copy (what he uploaded): one dealer's upload never changes what another
+ * dealer sees.
+ */
 export class ShopProfileRepository {
-  async listByIds(ids: string[]): Promise<ShopProfile[]> {
+  async listByIds(fpsId: string, ids: string[]): Promise<ShopProfile[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await supabase.from("fps_shop_profiles").select("*").in("shop_fps_id", ids);
+    const { data, error } = await supabase
+      .from("fps_shop_profiles")
+      .select("*")
+      .eq("fps_id", fpsId.trim())
+      .in("shop_fps_id", ids);
     if (error) throw new Error(`ShopProfileRepository.listByIds: ${error.message}`);
     return ((data as ShopProfileRow[]) || []).map(toProfile);
   }
 
   /** Saves each profile unless a newer report is already stored for that shop. */
-  async saveNewer(profiles: ShopProfile[]): Promise<{ saved: number; skippedOlder: number }> {
+  async saveNewer(fpsId: string, profiles: ShopProfile[]): Promise<{ saved: number; skippedOlder: number }> {
     if (profiles.length === 0) return { saved: 0, skippedOlder: 0 };
+    const owner = fpsId.trim();
     const existing = new Map(
-      (await this.listByIds(profiles.map((p) => p.shopFpsId))).map((p) => [p.shopFpsId, p])
+      (await this.listByIds(owner, profiles.map((p) => p.shopFpsId))).map((p) => [p.shopFpsId, p])
     );
     const keep = profiles.filter((p) => pickNewer(existing.get(p.shopFpsId), p) === p);
     if (keep.length > 0) {
-      const { error } = await supabase.from("fps_shop_profiles").upsert(keep.map(toRow), { onConflict: "shop_fps_id" });
+      const { error } = await supabase.from("fps_shop_profiles").upsert(keep.map((p) => toRow(owner, p)), { onConflict: "fps_id,shop_fps_id" });
       if (error) throw new Error(`ShopProfileRepository.saveNewer: ${error.message}`);
     }
     return { saved: keep.length, skippedOlder: profiles.length - keep.length };
+  }
+
+  async clearAll(fpsId: string): Promise<void> {
+    const { error } = await supabase.from("fps_shop_profiles").delete().eq("fps_id", fpsId.trim());
+    if (error) throw new Error(`ShopProfileRepository.clearAll: ${error.message}`);
   }
 }

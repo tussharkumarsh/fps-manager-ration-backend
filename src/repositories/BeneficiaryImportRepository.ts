@@ -89,4 +89,9 @@ export class BeneficiaryImportRepository {
     for (const r of rows) if (!latest.has(r.source_fps_id)) latest.set(r.source_fps_id, r);
     return Array.from(latest.values()).map(toImport);
   }
+
+  async clearAll(fpsId: string): Promise<void> {
+    const { error } = await supabase.from("beneficiary_imports").delete().eq("fps_id", fpsId.trim());
+    if (error) throw new Error(`BeneficiaryImportRepository.clearAll: ${error.message}`);
+  }
 }

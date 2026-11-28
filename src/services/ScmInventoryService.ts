@@ -1,8 +1,9 @@
 import { ScmApiClient, fetchShopAllotment } from "../lib/scmApiClient";
-import { afsoCodeFor, AFSO_NAMES, ALLOTMENT_COMMODITIES, ALLOTMENT_PREFIX, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts, replaceableCtypes } from "../lib/scmAllotment";
+import { afsoCodeFor, afsoNamesFor, ALLOTMENT_COMMODITIES, ALLOTMENT_PREFIX, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts, replaceableCtypes } from "../lib/scmAllotment";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import { MonthLockRepository } from "../repositories/MonthLockRepository";
+import { FpsDirectoryRepository } from "../repositories/FpsDirectoryRepository";
 import { buildMonthSummary, transactionsInDateMonth } from "../lib/scmSummary";
 import { currentIstYearMonth, monthsFrom, previousMonth } from "../lib/ids";
 import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
@@ -12,6 +13,7 @@ export class ScmInventoryService {
     private readonly api = new ScmApiClient();
     private readonly txnRepo = new TransactionRepository();
     private readonly lockRepo = new MonthLockRepository();
+    private readonly directoryRepo = new FpsDirectoryRepository();
 
     /**
      * Pulls this shop's allotment for every known commodity × allotment type
@@ -21,7 +23,10 @@ export class ScmInventoryService {
      */
     async syncAllotment(fpsId: string, year: string, month: string, distCode: string) {
         const afsoCode = afsoCodeFor(fpsId);
-        const names = AFSO_NAMES[afsoCode] ?? { distName: "", afsoName: "" };
+        // Names are only sent along with the codes (the portal answers by
+        // code), so a directory lookup failure just leaves them blank.
+        const directory = await this.directoryRepo.sampleByOffice(afsoCode).catch(() => []);
+        const names = afsoNamesFor(afsoCode, directory);
         const jobs = ALLOTMENT_COMMODITIES.flatMap((c) => ALLOTMENT_TYPES.map((t) => ({ c, t })));
 
         const rows: ScmInventoryTransaction[] = [];

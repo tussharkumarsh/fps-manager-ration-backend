@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { dealerIdentityError } from "../lib/dealerIdentity";
 import { AuthService } from "../services/AuthService";
 
 const router = Router();
@@ -33,6 +34,11 @@ router.post("/users", async (req, res) => {
       res.status(400).json({ error: "fpsId, distCode, username, password, displayName are required" });
       return;
     }
+    const identityError = dealerIdentityError(fpsId, distCode, role ?? "dealer");
+    if (identityError) {
+      res.status(400).json({ error: identityError });
+      return;
+    }
     await authService.createOrUpdateUser({ fpsId, distCode, username, password, displayName, role });
     res.json({ success: true });
   } catch (error) {
@@ -55,6 +61,16 @@ router.patch("/users/:fpsId", async (req, res) => {
     if (role !== undefined && role !== "dealer" && role !== "admin") {
       res.status(400).json({ error: "role must be 'dealer' or 'admin'" });
       return;
+    }
+    if (distCode !== undefined || role !== undefined) {
+      const current = await authService.getProfile(req.params.fpsId);
+      if (current) {
+        const identityError = dealerIdentityError(req.params.fpsId, distCode ?? current.distCode, role ?? current.role);
+        if (identityError) {
+          res.status(400).json({ error: identityError });
+          return;
+        }
+      }
     }
     const profile = await authService.updateProfile(req.params.fpsId, {
       distCode,

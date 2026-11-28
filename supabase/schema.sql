@@ -336,3 +336,11 @@ create table if not exists fps_shop_profiles (
   uploaded_at timestamptz not null default now()
 );
 alter table fps_shop_profiles enable row level security;
+
+-- Changed 2026-11-28: profiles are per dealer (what he uploaded), so one
+-- dealer's upload never changes another dealer's view.
+alter table fps_shop_profiles add column if not exists fps_id text;
+update fps_shop_profiles set fps_id = '151209500212' where fps_id is null;
+alter table fps_shop_profiles alter column fps_id set not null;
+alter table fps_shop_profiles drop constraint if exists fps_shop_profiles_pkey;
+alter table fps_shop_profiles add primary key (fps_id, shop_fps_id);
