@@ -4,7 +4,7 @@ import { SyncService } from "../services/SyncService";
 import { ScmInventoryService } from "../services/ScmInventoryService";
 import { SyncRunRepository } from "../repositories/SyncRunRepository";
 import { currentIstYearMonth } from "../lib/ids";
-import { dealersToSync, isCronAuthorized, monthsToSync } from "../lib/nightlySync";
+import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync } from "../lib/nightlySync";
 
 /**
  * Nightly auto-sync, triggered by Vercel Cron (vercel.json, 23:00 IST).
@@ -31,7 +31,7 @@ router.get("/nightly", async (req, res) => {
     const dealers = dealersToSync(await authService.listUsers());
     const months = monthsToSync();
     const current = currentIstYearMonth();
-    const base = `https://${req.header("host")}`;
+    const base = fanOutBase(process.env, req.header("host"));
     const jobs = dealers.flatMap((d) => [
       ...months.map((m) => ({ fpsId: d.fpsId, job: "transactions", ...m })),
       { fpsId: d.fpsId, job: "scm", ...current },

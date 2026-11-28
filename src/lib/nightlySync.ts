@@ -29,3 +29,13 @@ export function dealersToSync<U extends { fpsId: string; distCode: string; role:
 ): U[] {
   return users.filter((u) => u.role === "dealer" && u.active && u.fpsId.trim() && u.distCode.trim());
 }
+
+/**
+ * Where /cron/nightly sends its per-dealer requests: the project's
+ * production domain (Vercel sets VERCEL_PROJECT_PRODUCTION_URL), because
+ * per-deployment URLs sit behind Vercel Authentication and would refuse
+ * them. Falls back to the request's own host (e.g. local runs).
+ */
+export function fanOutBase(env: { VERCEL_PROJECT_PRODUCTION_URL?: string }, host: string | undefined): string {
+  return `https://${env.VERCEL_PROJECT_PRODUCTION_URL || host || ""}`;
+}

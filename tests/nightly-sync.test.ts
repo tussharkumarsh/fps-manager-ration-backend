@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { dealersToSync, isCronAuthorized, monthsToSync } from "../src/lib/nightlySync";
+import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync } from "../src/lib/nightlySync";
 
 test("monthsToSync is the current IST month, plus the previous one in the first five days", () => {
   // 28 Nov 2026 23:00 IST
@@ -34,4 +34,12 @@ test("dealersToSync keeps active dealers with an FPS and district", () => {
     { fpsId: "151209500299", distCode: "", role: "dealer", active: true },
   ];
   assert.deepEqual(dealersToSync(users).map((u) => u.fpsId), ["151209500212"]);
+});
+
+test("fanOutBase prefers the production domain (deployment URLs sit behind Vercel Authentication)", () => {
+  assert.equal(
+    fanOutBase({ VERCEL_PROJECT_PRODUCTION_URL: "fps-manager-ration-backend.vercel.app" }, "fps-x-abc123.vercel.app"),
+    "https://fps-manager-ration-backend.vercel.app"
+  );
+  assert.equal(fanOutBase({}, "localhost:4000"), "https://localhost:4000");
 });
