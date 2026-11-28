@@ -47,3 +47,14 @@ test("an error thrown in an asyncRoute handler reaches the client as JSON 500", 
     server.close();
   }
 });
+
+test("errorHandler keeps a client-error status set on the error (e.g. malformed JSON body)", () => {
+  const res = fakeRes();
+  errorHandler(Object.assign(new Error("Unexpected token"), { status: 400 }), {} as never, res as never, () => undefined);
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: "Unexpected token" });
+  // A server-side status on an error is still answered as 500.
+  const res2 = fakeRes();
+  errorHandler(Object.assign(new Error("x"), { status: 503 }), {} as never, res2 as never, () => undefined);
+  assert.equal(res2.statusCode, 500);
+});

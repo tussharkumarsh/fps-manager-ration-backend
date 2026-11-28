@@ -40,7 +40,7 @@ router.post("/users", asyncRoute(async (req, res) => {
 }));
 
 router.delete("/users/:fpsId", asyncRoute(async (req, res) => {
-  await authService.deleteUser(req.params.fpsId);
+  await authService.deleteUser(String(req.params.fpsId));
   res.json({ success: true });
 }));
 
@@ -51,16 +51,16 @@ router.patch("/users/:fpsId", asyncRoute(async (req, res) => {
     return;
   }
   if (distCode !== undefined || role !== undefined) {
-    const current = await authService.getProfile(req.params.fpsId);
+    const current = await authService.getProfile(String(req.params.fpsId));
     if (current) {
-      const identityError = dealerIdentityError(req.params.fpsId, distCode ?? current.distCode, role ?? current.role);
+      const identityError = dealerIdentityError(String(req.params.fpsId), distCode ?? current.distCode, role ?? current.role);
       if (identityError) {
         res.status(400).json({ error: identityError });
         return;
       }
     }
   }
-  const profile = await authService.updateProfile(req.params.fpsId, {
+  const profile = await authService.updateProfile(String(req.params.fpsId), {
     distCode,
     username,
     displayName,
