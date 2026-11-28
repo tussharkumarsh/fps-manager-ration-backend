@@ -77,7 +77,7 @@ export class ScmInventoryService {
         await this.repo.deleteStaleAllotmentRows(fpsId, year, month, ctypes, keep.map((r) => r.sourceIdentifier));
         await this.recomputeFrom(fpsId, year, month);
         const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
-        return { allotmentRows: keep.length, roCount: 0, truckChitCount: 0, summary, warnings };
+        return { allotmentRows: keep.length, summary, warnings };
     }
 
     async recomputeYear(fpsId: string, year: string): Promise<void> {
