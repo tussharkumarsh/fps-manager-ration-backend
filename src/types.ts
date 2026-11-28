@@ -28,6 +28,18 @@ export interface Customer {
   disabled?: boolean;
   disabledReason?: string;
   disabledAt?: string;
+  // From the government beneficiary file ("FPS-wise RC & Member Details").
+  /** FPS whose file this card last came from ("" / undefined = own, imported before this existed). */
+  sourceFpsId?: string;
+  sourceFpsName?: string;
+  /** When this card was last present in an uploaded file (ISO). */
+  portalSyncedAt?: string;
+  approvalDate?: string;
+  approvedBy?: string;
+  /** "A" (Verified and Approved) / "U" (Yet to be Scanned). */
+  statusCode?: string;
+  /** The head's mobile exactly as in the file, usually masked. */
+  portalMobile?: string;
 }
 
 export interface Transaction {
