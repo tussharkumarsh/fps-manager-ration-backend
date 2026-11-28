@@ -1,4 +1,4 @@
-import { ScmApiClient, fetchShopAllotment } from "../lib/scmApiClient";
+import { fetchShopAllotment } from "../lib/scmApiClient";
 import { afsoCodeFor, afsoNamesFor, ALLOTMENT_COMMODITIES, ALLOTMENT_PREFIX, ALLOTMENT_TYPES, allotmentToScmTxns, findShopAllotment, preferActualReceipts, replaceableCtypes } from "../lib/scmAllotment";
 import { ScmInventoryRepository } from "../repositories/ScmInventoryRepository";
 import { TransactionRepository } from "../repositories/TransactionRepository";
@@ -6,11 +6,10 @@ import { MonthLockRepository } from "../repositories/MonthLockRepository";
 import { FpsDirectoryRepository } from "../repositories/FpsDirectoryRepository";
 import { buildMonthSummary, transactionsInDateMonth } from "../lib/scmSummary";
 import { currentIstYearMonth, monthsFrom, previousMonth } from "../lib/ids";
-import type { ScmInventoryTransaction, ScmRoRecord, ScmTruckChitRecord } from "../types";
+import type { ScmInventoryTransaction } from "../types";
 
 export class ScmInventoryService {
     private readonly repo = new ScmInventoryRepository();
-    private readonly api = new ScmApiClient();
     private readonly txnRepo = new TransactionRepository();
     private readonly lockRepo = new MonthLockRepository();
     private readonly directoryRepo = new FpsDirectoryRepository();
@@ -79,121 +78,6 @@ export class ScmInventoryService {
         await this.recomputeFrom(fpsId, year, month);
         const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
         return { allotmentRows: keep.length, roCount: 0, truckChitCount: 0, summary, warnings };
-    }
-
-    async syncMonth(fpsId: string, year: string, month: string, shopNo?: string, districtCode?: string, districtName?: string, batchNo?: string) {
-        // The SCM portal's shop number is the dealer's own fps_id, and its
-        // district name param is just the district code repeated - so both
-        // default off values we already have rather than requiring separate config.
-        const effectiveShopNo = shopNo || fpsId || process.env.SCM_SHOP_NO;
-        const effectiveDistrictCode = districtCode || process.env.SCM_DISTRICT_CODE;
-        const effectiveDistrictName = districtName || effectiveDistrictCode || process.env.SCM_DISTRICT_NAME;
-
-        if (!effectiveShopNo || !effectiveDistrictCode || !effectiveDistrictName) {
-            throw new Error("shopNo (or fpsId) and districtCode are required to sync SCM inventory");
-        }
-
-        const roRows = await this.api.fetchMonthlyRoList({
-            shopNo: effectiveShopNo,
-            districtCode: effectiveDistrictCode,
-            districtName: effectiveDistrictName,
-            year,
-            month,
-        });
-
-        const normalizedBatchNo = String(batchNo ?? "").trim();
-        const requestedRoRows = normalizedBatchNo
-            ? roRows.filter((row) => row.roNo.endsWith(`/${normalizedBatchNo}`))
-            : roRows;
-
-        const roRecords: ScmRoRecord[] = requestedRoRows.map((row) => ({
-            fpsId,
-            shopNo: row.shopNo,
-            districtCode: row.districtCode,
-            districtName: row.districtName,
-            year: row.year,
-            month: row.month,
-            roNo: row.roNo,
-            roDate: row.roDate,
-            roTime: row.roTime,
-            dispatched: row.dispatched,
-            sequenceNo: row.sequenceNo,
-            sourceIdentifier: row.sourceIdentifier,
-        }));
-
-        await this.repo.upsertRoRecords(roRecords);
-
-        const truckChits: ScmTruckChitRecord[] = [];
-        const transactions: ScmInventoryTransaction[] = [];
-        for (const ro of roRecords) {
-            if (!ro.roNo) continue;
-            const truckChitNo = this.buildTruckChitPattern(ro.roNo);
-            const truckRows = await this.api.fetchTruckChitDetail({
-                shopNo: effectiveShopNo,
-                districtCode: effectiveDistrictCode,
-                districtName: effectiveDistrictName,
-                year,
-                month,
-                roNo: ro.roNo,
-                truckChitNo,
-                sequenceNo: ro.sequenceNo,
-            });
-
-            if (truckRows.length === 0) continue;
-
-            const truckRecord: ScmTruckChitRecord = {
-                fpsId,
-                truckChitNo,
-                roNo: ro.roNo,
-                year,
-                month,
-                sequenceNo: ro.sequenceNo,
-                dispatchDate: truckRows[0]?.dispatchDate,
-                truckNo: undefined,
-                sourceIdentifier: truckChitNo,
-            };
-            truckChits.push(truckRecord);
-
-            for (const row of truckRows) {
-                transactions.push({
-                    fpsId,
-                    truckChitNo,
-                    roNo: ro.roNo,
-                    year,
-                    month,
-                    scheme: row.scheme,
-                    commodity: row.commodity,
-                    unit: row.unit,
-                    allocatedQty: row.allocatedQty,
-                    dispatchedQty: row.dispatchedQty,
-                    receivedQty: row.receivedQty,
-                    transactionDate: row.transactionDate,
-                    sourceIdentifier: row.sourceIdentifier,
-                    districtCode: effectiveDistrictCode,
-                });
-            }
-        }
-
-        await this.repo.upsertTruckChits(truckChits);
-        await this.repo.upsertTransactions(transactions);
-
-        // Recompute this month (from everything stored for it, not just this
-        // batch) and every later month, since each month's opening is the
-        // previous month's closing.
-        await this.recomputeFrom(fpsId, year, month);
-        const summary = await this.repo.getSummaryForMonth(fpsId, year, month);
-
-        return {
-            roCount: roRecords.length,
-            truckChitCount: truckChits.length,
-            summary,
-            transactions,
-        };
-    }
-
-    private buildTruckChitPattern(roNo: string): string {
-        const formatted = roNo.replace(/^RO\//, "").replace(/\//g, "-");
-        return `TC-${formatted}`;
     }
 
     async recomputeYear(fpsId: string, year: string): Promise<void> {

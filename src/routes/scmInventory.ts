@@ -5,7 +5,7 @@ const router = Router();
 const service = new ScmInventoryService();
 
 router.post("/sync", async (req, res) => {
-    const { fpsId, year, month, shopNo, districtCode, districtName, batchNo } = req.body ?? {};
+    const { fpsId, year, month, districtCode } = req.body ?? {};
 
     if (!fpsId || !year || !month) {
         res.status(400).json({ error: "fpsId, year and month are required" });

@@ -2,8 +2,6 @@ import { supabase, fetchAllRows } from "../lib/supabase";
 import type {
     InventoryMonthlySummary,
     ScmInventoryTransaction,
-    ScmRoRecord,
-    ScmTruckChitRecord,
 } from "../types";
 
 interface SummaryRowDb {
@@ -39,53 +37,6 @@ function rowToSummary(row: SummaryRowDb): InventoryMonthlySummary {
 }
 
 export class ScmInventoryRepository {
-    async upsertRoRecords(rows: ScmRoRecord[]): Promise<number> {
-        if (rows.length === 0) return 0;
-        const payload = rows.map((row) => ({
-            fps_id: row.fpsId,
-            shop_no: row.shopNo,
-            district_code: row.districtCode,
-            district_name: row.districtName,
-            year: row.year,
-            month: row.month,
-            ro_no: row.roNo,
-            ro_date: row.roDate || null,
-            ro_time: row.roTime || null,
-            dispatched: row.dispatched,
-            sequence_no: row.sequenceNo,
-            source_identifier: row.sourceIdentifier,
-            imported_at: new Date().toISOString(),
-        }));
-
-        const { error } = await supabase.from("scm_monthly_ro_records").upsert(payload, {
-            onConflict: "source_identifier",
-        });
-        if (error) throw new Error(`ScmInventoryRepository.upsertRoRecords: ${error.message}`);
-        return payload.length;
-    }
-
-    async upsertTruckChits(rows: ScmTruckChitRecord[]): Promise<number> {
-        if (rows.length === 0) return 0;
-        const payload = rows.map((row) => ({
-            fps_id: row.fpsId,
-            truck_chit_no: row.truckChitNo,
-            ro_no: row.roNo,
-            year: row.year,
-            month: row.month,
-            sequence_no: row.sequenceNo,
-            dispatch_date: row.dispatchDate || null,
-            truck_no: row.truckNo || null,
-            source_identifier: row.sourceIdentifier,
-            imported_at: new Date().toISOString(),
-        }));
-
-        const { error } = await supabase.from("scm_truck_chits").upsert(payload, {
-            onConflict: "source_identifier",
-        });
-        if (error) throw new Error(`ScmInventoryRepository.upsertTruckChits: ${error.message}`);
-        return payload.length;
-    }
-
     async upsertTransactions(rows: ScmInventoryTransaction[]): Promise<number> {
         if (rows.length === 0) return 0;
         const payload = rows.map((row) => ({
@@ -195,29 +146,6 @@ export class ScmInventoryRepository {
         const { error: insertError } = await supabase.from("scm_inventory_summary").insert(payload);
         if (insertError) throw new Error(`ScmInventoryRepository.replaceSummaryRows.insert: ${insertError.message}`);
         return payload.length;
-    }
-
-    async getMonthCounts(fpsId: string, year: string, month: string): Promise<{ roCount: number; truckChitCount: number; }> {
-        const { count: roCount, error: roError } = await supabase
-            .from("scm_monthly_ro_records")
-            .select("*", { count: "exact", head: true })
-            .eq("fps_id", fpsId.trim())
-            .eq("year", String(year).trim())
-            .eq("month", String(month).trim());
-        if (roError) throw new Error(`ScmInventoryRepository.getMonthCounts.ro: ${roError.message}`);
-
-        const { count: truckChitCount, error: truckError } = await supabase
-            .from("scm_truck_chits")
-            .select("*", { count: "exact", head: true })
-            .eq("fps_id", fpsId.trim())
-            .eq("year", String(year).trim())
-            .eq("month", String(month).trim());
-        if (truckError) throw new Error(`ScmInventoryRepository.getMonthCounts.truck: ${truckError.message}`);
-
-        return {
-            roCount: roCount ?? 0,
-            truckChitCount: truckChitCount ?? 0,
-        };
     }
 
     async getMonthTransactions(fpsId: string, year: string, month: string): Promise<ScmInventoryTransaction[]> {
