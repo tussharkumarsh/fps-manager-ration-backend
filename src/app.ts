@@ -11,6 +11,7 @@ import resetAllRoutes from "./routes/resetAll";
 import goshwaraRoutes from "./routes/goshwara";
 import otherShopRoutes from "./routes/otherShops";
 import cronRoutes from "./routes/cron";
+import { errorHandler } from "./middleware/errors";
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || "").split(",").map((o) => o.trim());
@@ -52,5 +53,8 @@ app.use("/inventory/scm", scmInventoryRoutes);
 app.use("/reset-all", resetAllRoutes);
 app.use("/goshwara", goshwaraRoutes);
 app.use("/other-shops", otherShopRoutes);
+
+// Must stay last: errors thrown inside asyncRoute handlers land here.
+app.use(errorHandler);
 
 export default app;
