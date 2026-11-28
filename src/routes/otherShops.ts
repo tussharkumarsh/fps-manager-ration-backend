@@ -4,8 +4,11 @@ import { isValidShopFpsId, sanitizeShopDetails } from "../lib/otherShop";
 import { FpsDirectoryRepository } from "../repositories/FpsDirectoryRepository";
 import { GovApiClient } from "../clients/GovApiClient";
 import { isValidOfficeCode } from "../lib/fpsDirectory";
+import { ShopProfileRepository } from "../repositories/ShopProfileRepository";
+import { sanitizeProfile, type ShopProfile } from "../lib/shopProfile";
 
 const router = Router();
+const profileRepo = new ShopProfileRepository();
 const repo = new OtherShopRepository();
 const directoryRepo = new FpsDirectoryRepository();
 const govApi = new GovApiClient();
@@ -40,6 +43,39 @@ router.post("/directory/sync", async (req, res) => {
     res.json({ success: true, officeCode: officeCode.trim(), count: entries.length });
   } catch (error) {
     res.status(502).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Stored shop-report profiles for the given FPS numbers (?ids=a,b,c). */
+router.get("/profiles", async (req, res) => {
+  const ids = String(req.query.ids || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => isValidShopFpsId(s));
+  if (ids.length > 500) {
+    res.status(400).json({ error: "Too many ids" });
+    return;
+  }
+  try {
+    res.json({ success: true, profiles: await profileRepo.listByIds(Array.from(new Set(ids))) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/** Saves shop-report profiles (the caller keeps only shops related to the dealer). */
+router.post("/profiles", async (req, res) => {
+  const raw = req.body?.profiles;
+  if (!Array.isArray(raw) || raw.length > 500) {
+    res.status(400).json({ error: "profiles[] (at most 500) is required" });
+    return;
+  }
+  const profiles = raw.map(sanitizeProfile).filter((p): p is ShopProfile => p !== null);
+  try {
+    const result = await profileRepo.saveNewer(profiles);
+    res.json({ success: true, ...result, rejected: raw.length - profiles.length });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

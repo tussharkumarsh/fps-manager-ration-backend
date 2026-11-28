@@ -312,3 +312,27 @@ create table if not exists beneficiary_imports (
 create index if not exists beneficiary_imports_latest_idx
   on beneficiary_imports (fps_id, source_fps_id, imported_at desc);
 alter table beneficiary_imports enable row level security;
+
+-- Added 2026-11-28: shops from the government "FPS Wise Scheme Wise UID
+-- Count" report (one file per TFSO), uploaded by a dealer. Public data,
+-- shared like fps_directory; only shops related to the uploading dealer are
+-- stored. A newer report (report_updated_at) always wins.
+create table if not exists fps_shop_profiles (
+  shop_fps_id text primary key,
+  office_code text not null default '',
+  dealer_name text not null default '',
+  mobile text not null default '',
+  shop_no text not null default '',
+  village text not null default '',
+  tehsil text not null default '',
+  license_no text not null default '',
+  shop_type text not null default '',
+  district text not null default '',
+  dfso text not null default '',
+  tfso text not null default '',
+  report_updated_on text not null default '',
+  report_updated_at timestamptz not null,
+  counts jsonb not null default '{}'::jsonb,
+  uploaded_at timestamptz not null default now()
+);
+alter table fps_shop_profiles enable row level security;
