@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync } from "../src/lib/nightlySync";
+import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync, retryOnce } from "../src/lib/nightlySync";
 
 test("monthsToSync is the current IST month, plus the previous one in the first five days", () => {
   // 28 Nov 2026 23:00 IST
@@ -42,4 +42,18 @@ test("fanOutBase prefers the production domain (deployment URLs sit behind Verce
     "https://fps-manager-ration-backend.vercel.app"
   );
   assert.equal(fanOutBase({}, "localhost:4000"), "https://localhost:4000");
+});
+
+test("retryOnce waits and runs a failed job one more time", async () => {
+  const waits: number[] = [];
+  const sleep = async (ms: number) => { waits.push(ms); };
+  let calls = 0;
+  const flaky = async () => { calls++; if (calls === 1) throw new Error("fetch failed"); return "ok"; };
+  assert.equal(await retryOnce(flaky, 15_000, sleep), "ok");
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [15_000]);
+
+  let failing = 0;
+  await assert.rejects(retryOnce(async () => { failing++; throw new Error("down"); }, 10, sleep), /down/);
+  assert.equal(failing, 2);
 });

@@ -39,3 +39,19 @@ export function dealersToSync<U extends { fpsId: string; distCode: string; role:
 export function fanOutBase(env: { VERCEL_PROJECT_PRODUCTION_URL?: string }, host: string | undefined): string {
   return `https://${env.VERCEL_PROJECT_PRODUCTION_URL || host || ""}`;
 }
+
+export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs a nightly job, and once more after `delayMs` if it fails: the ePOS
+ * portal drops connections now and then (more so when several dealers sync
+ * at once), and nobody is waiting on a nightly job.
+ */
+export async function retryOnce<T>(job: () => Promise<T>, delayMs: number, wait = sleep): Promise<T> {
+  try {
+    return await job();
+  } catch {
+    await wait(delayMs);
+    return job();
+  }
+}

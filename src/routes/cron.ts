@@ -4,7 +4,7 @@ import { SyncService } from "../services/SyncService";
 import { ScmInventoryService } from "../services/ScmInventoryService";
 import { SyncRunRepository } from "../repositories/SyncRunRepository";
 import { currentIstYearMonth } from "../lib/ids";
-import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync } from "../lib/nightlySync";
+import { dealersToSync, fanOutBase, isCronAuthorized, monthsToSync, retryOnce, sleep } from "../lib/nightlySync";
 
 /**
  * Nightly auto-sync, triggered by Vercel Cron (vercel.json, 23:00 IST).
@@ -76,10 +76,14 @@ router.get("/dealer", async (req, res) => {
   try {
     let detail: string;
     if (job === "transactions") {
-      const r = await syncService.getMonthData(dealer.distCode, fpsId, year, month, false, true);
+      // Spread the dealers' ePOS requests out, and give the portal a second
+      // chance (inside the 60 s limit: ~10 s + ~20 s + 15 s + ~20 s at worst
+      // only when the first attempt runs long, which a failure seldom does).
+      await sleep(Math.random() * 10_000);
+      const r = await retryOnce(() => syncService.getMonthData(dealer.distCode, fpsId, year, month, false, true), 15_000);
       detail = `${r.transactions.length} record(s)`;
     } else {
-      const r = await scmService.syncAllotment(fpsId, year, month, dealer.distCode);
+      const r = await retryOnce(() => scmService.syncAllotment(fpsId, year, month, dealer.distCode), 10_000);
       detail = `${r.allotmentRows} allotment row(s)${r.warnings.length ? `; ${r.warnings.length} skipped` : ""}`;
     }
     await runs.finish(runId, true, detail);
