@@ -90,6 +90,22 @@ router.post("/import", async (req, res) => {
   }
 });
 
+/** One card's family members (lists leave them out to stay small). */
+router.get("/members", async (req, res) => {
+  const fpsId = String(req.query.fpsId || "");
+  const srcNo = String(req.query.srcNo || "");
+  if (!fpsId || !srcNo) {
+    res.status(400).json({ error: "fpsId and srcNo are required" });
+    return;
+  }
+  try {
+    const members = await transactionService.getCustomerMembers(fpsId, srcNo);
+    res.json({ success: true, members });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 /** Latest beneficiary-file upload per source FPS, for the FPS-wise summary. */
 router.get("/imports", async (req, res) => {
   const fpsId = String(req.query.fpsId || "");

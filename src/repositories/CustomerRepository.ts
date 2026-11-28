@@ -1,6 +1,6 @@
 import { supabase, fetchAllRows } from "../lib/supabase";
 import type { Customer } from "../types";
-import { mergeBeneficiary, type CustomerRow, type WritableCustomerRow } from "../lib/beneficiaryMerge";
+import { CUSTOMER_LIST_COLUMNS, mergeBeneficiary, type CustomerRow, type WritableCustomerRow } from "../lib/beneficiaryMerge";
 import { cardsToReEnable } from "../lib/autoEnable";
 
 function rowToCustomer(row: CustomerRow): Customer {
@@ -55,11 +55,29 @@ function customerToRow(fpsId: string, c: Customer): WritableCustomerRow {
 }
 
 export class CustomerRepository {
+  /** Every card of this dealer, without family members (see CUSTOMER_LIST_COLUMNS). */
   async getAll(fpsId: string): Promise<Customer[]> {
     const rows = await fetchAllRows<CustomerRow>((from, to) =>
-      supabase.from("customers").select("*").eq("fps_id", fpsId.trim()).range(from, to)
+      supabase
+        .from("customers")
+        .select(CUSTOMER_LIST_COLUMNS)
+        .eq("fps_id", fpsId.trim())
+        .range(from, to)
+        .returns<CustomerRow[]>()
     );
     return rows.map(rowToCustomer);
+  }
+
+  /** One card's family members, or [] when the card or its members are unknown. */
+  async getMembers(fpsId: string, srcNo: string): Promise<NonNullable<Customer["members"]>> {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("members_json")
+      .eq("fps_id", fpsId.trim())
+      .eq("src_no", srcNo.trim())
+      .maybeSingle();
+    if (error) throw new Error(`CustomerRepository.getMembers: ${error.message}`);
+    return (data as { members_json: Customer["members"] | null } | null)?.members_json ?? [];
   }
 
   /**

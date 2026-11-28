@@ -27,6 +27,20 @@ export interface CustomerRow {
 }
 
 /**
+ * Every `customers` column except `members_json`. Family members are most
+ * of a card's size (~4 MB of ~6 MB for 3,400 cards), and only one card's
+ * members are ever shown at a time, so lists leave them out and they are
+ * read per card. Typed against CustomerRow so a new column can't be missed.
+ */
+const LIST_COLUMN_NAMES: Exclude<keyof CustomerRow, "members_json">[] = [
+  "fps_id", "src_no", "name", "last_dispatched", "scheme", "s_no", "area_type", "status",
+  "member_count", "mobile", "family_head", "disabled", "disabled_reason", "disabled_at",
+  "source_fps_id", "source_fps_name", "portal_synced_at", "approval_date", "approved_by",
+  "status_code", "portal_mobile",
+];
+export const CUSTOMER_LIST_COLUMNS = LIST_COLUMN_NAMES.join(",");
+
+/**
  * The columns an import may write. Disable state is left out on purpose:
  * only a direct edit from the UI ever sets it, so no import can re-enable a
  * card or clear its reason.

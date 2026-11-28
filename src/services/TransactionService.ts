@@ -17,6 +17,10 @@ export class TransactionService {
     return this.customerRepo.getAll(fpsId);
   }
 
+  async getCustomerMembers(fpsId: string, srcNo: string): Promise<NonNullable<Customer["members"]>> {
+    return this.customerRepo.getMembers(fpsId, srcNo);
+  }
+
   /**
    * Imports customers and verifies the write actually persisted by reading
    * it back. Retries once on a mismatch before failing loudly, since
